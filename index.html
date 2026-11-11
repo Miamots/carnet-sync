@@ -1584,7 +1584,7 @@ function inboxHTML(gid){const g=S.groups.get(gid);const L=(g&&g.inbox||[]).slice
   const nm=k=>{const c=S.children.get(k);return c?c.name:"?"};
   return `<section class="card inbox"><details class="ogdet" data-dk="inbox-${gid}" ${openDetails.has("inbox-"+gid)||L.length<=3?"open":""}><summary><h3 style="font-size:1.25rem;display:inline">À classer</h3> <span class="cnt">${L.length}</span></summary>
   <div class="entries" style="margin-top:8px">${L.map(q=>`<div class="entry col"><div class="erow"><span class="when">${fmtD(q.date)}</span><span class="txt">${q.kids&&q.kids.length?`<b>${q.kids.map(k=>esc(nm(k))).join(", ")}</b> · `:""}${esc(q.text)}</span></div><div class="row-actions" style="margin-top:4px"><button class="btn small primary" data-act="qnSort" data-id="${gid}" data-q="${q.id}">Classer</button><button class="x" aria-label="Supprimer" data-act="qnDel" data-id="${gid}" data-q="${q.id}">✕</button></div></div>`).join("")}</div>
-  <div class="row-actions" style="margin-top:8px"><button class="btn small" data-act="qnAI" data-id="${gid}">Copier pour mon IA</button><button class="btn small ghost" data-act="qnClear" data-id="${gid}">Tout effacer</button></div>
+  <div class="row-actions" style="margin-top:8px">${sample?`<button class="btn small primary" data-act="qnRg" data-id="${gid}">Ranger avec Claude</button>`:""}<button class="btn small" data-act="qnAI" data-id="${gid}">Copier pour mon IA</button><button class="btn small ghost" data-act="qnClear" data-id="${gid}">Tout effacer</button></div>
   <p class="muted small" style="margin:6px 0 0">« Copier pour mon IA » : votre IA les classe et vous redonne un bloc carnet à importer (Notes › Importer une note). Effacez ensuite la liste.</p></details></section>`}
 function qnSortSheet(gid,qid){const g=S.groups.get(gid);const q=(g.inbox||[]).find(x=>x.id===qid);if(!q)return;const kids=childrenOf(gid);const sel=new Set(q.kids||[]);
   openSheet(`<h3>Classer la note</h3><textarea class="field" id="qsText" rows="3">${esc(q.text)}</textarea>
@@ -2418,6 +2418,8 @@ document.addEventListener("click",e=>{
   else if(a==="qnSort")qnSortSheet(id,b.dataset.q);
   else if(a==="qnDel"){mutGroup(id,x=>{x.inbox=(x.inbox||[]).filter(y=>y.id!==b.dataset.q)});render()}
   else if(a==="qnClear"){if(b.dataset.sure){mutGroup(id,x=>{x.inbox=[]});render()}else{b.dataset.sure="1";b.textContent="Toucher encore pour confirmer"}}
+  else if(a==="qnRg"){const g=S.groups.get(id);const L=(g.inbox||[]).slice().sort((a,b)=>(a.at||"").localeCompare(b.at||""));if(!L.length)return;const nm=k=>{const c=S.children.get(k);return c?c.name:""};
+    const ds=[...new Set(L.map(q=>q.date))];pasteSheet(id,ds[ds.length-1],{inbox:L.map(q=>q.id),prefill:L.map(q=>(ds.length>1?q.date+" ":"")+(q.kids&&q.kids.length?q.kids.map(nm).join(", ")+" : ":"")+q.text).join("\n")})}
   else if(a==="qnAI"){const g=S.groups.get(id);const nm=k=>{const c=S.children.get(k);return c?c.name:""};copyText(`Voici des notes rapides prises en classe nature (groupe ${g.name}). Classe-les selon tes instructions et redonne-moi seulement le bloc carnet à importer.\n\n`+(g.inbox||[]).map(q=>`- ${q.date}${q.kids&&q.kids.length?" ("+q.kids.map(nm).join(", ")+")":""} : ${q.text}`).join("\n"),"Notes copiées : collez-les dans votre IA")}
   else if(a==="cObjNote")objNote2Sheet(id,b.dataset.o);
   else if(a==="gObjNote")gObjNoteSheet(id,b.dataset.o);
@@ -2673,7 +2675,7 @@ ${text}
 function pasteSheet(gid,atDate,opts){opts=opts||{};
   const g=S.groups.get(gid);const kids=childrenOf(gid);const ai=AIS[getAI()];
   const pe=opts.replace&&g.pendingExport&&g.pendingExport.date===(atDate||S.obsDate)?g.pendingExport:null;
-  openSheet(`<h3>${opts.terrain?"Ranger les notes du terrain":opts.replace?"Importer la réponse de l'IA":"Importer une note"}</h3>${pe?`<div class="notice">Après l'import, les <b>${pe.items.length} notes</b> exportées du ${fmtD(pe.date)} seront remplacées par les notes propres. Les originales restent gardées dans le calendrier.</div>`:""}${opts.terrain?`<p class="small" style="margin:0"><b>Vos notes du terrain sont déjà collées.</b> Une fois rangées, elles remplacent les notes « à ranger » de cette date.</p>`:""}
+  openSheet(`<h3>${opts.inbox?"Ranger les notes rapides":opts.terrain?"Ranger les notes du terrain":opts.replace?"Importer la réponse de l'IA":"Importer une note"}</h3>${pe?`<div class="notice">Après l'import, les <b>${pe.items.length} notes</b> exportées du ${fmtD(pe.date)} seront remplacées par les notes propres. Les originales restent gardées dans le calendrier.</div>`:""}${opts.inbox?`<p class="small" style="margin:0"><b>Vos notes « À classer » sont déjà collées.</b> Une fois rangées, elles quittent la liste « À classer ».</p>`:""}${opts.terrain?`<p class="small" style="margin:0"><b>Vos notes du terrain sont déjà collées.</b> Une fois rangées, elles remplacent les notes « à ranger » de cette date.</p>`:""}
   <p class="muted small" style="margin:0">Collez la note de la rencontre : votre note dictée en vrac, ou la note rédigée par votre IA avec son bloc carnet à la fin. Tout sera classé par enfant, occupation et repère. Vous relisez avant d'enregistrer.</p>
   <label class="f">Date de la rencontre<input type="date" class="field" id="pDate" value="${atDate||S.obsDate}"></label>
   <label class="f">Contexte du jour (facultatif)<input class="field" id="pCtx" value="${esc((g.ctx||{})[atDate||S.obsDate]||"")}" placeholder="Ex. : cueillette sur le sentier"></label>
@@ -2681,7 +2683,7 @@ function pasteSheet(gid,atDate,opts){opts=opts||{};
   <div class="row-actions" style="margin-top:-4px"><label class="btn small">📂 Ouvrir un ou des fichiers (.json, .txt)<input type="file" accept=".json,.txt,application/json,text/plain" multiple hidden id="pFile"></label></div><label style="display:none"></label>
   ${kids.length?"":`<div class="notice">Ajoutez d'abord les enfants du groupe pour que les notes puissent leur être attribuées.</div>`}
   <label class="chk"><input type="checkbox" id="pSug" ${S.sugPref!==false?"checked":""}> Proposer aussi les cases, le soutien, les facilitateurs et les objectifs</label>
-  <label class="chk"><input type="checkbox" id="pSrc" ${opts.terrain?"":"checked"}> Garder la note originale complète dans le journal du groupe</label>
+  <label class="chk"><input type="checkbox" id="pSrc" ${opts.terrain||opts.inbox?"":"checked"}> Garder la note originale complète dans le journal du groupe</label>
   <div class="row-actions"><button class="btn primary" id="pGo" ${kids.length?"":"disabled"}>Lire la note</button><button class="btn" id="pCancel">Annuler</button></div>
   <div id="pOut"></div>`,s=>{
     s.querySelector("#pCancel").onclick=closeSheet;
@@ -2700,7 +2702,7 @@ function pasteSheet(gid,atDate,opts){opts=opts||{};
       let date=s.querySelector("#pDate").value||todayISO();const pc=s.querySelector("#pCtx").value.trim();const out=s.querySelector("#pOut");const btn=s.querySelector("#pGo");
       const goAll=list=>{const q=list.slice().sort((a,b)=>String(a.date||"").localeCompare(String(b.date||"")));let i=0;
         const next=()=>{if(i>=q.length){closeSheet();render();return}const b=q[i];const n=q.length;b.__step=n>1?`Rencontre ${i+1} sur ${n}`:"";b.__next=i<n-1?next:null;i++;go(b,i>1)};next()};
-      const go=(bloc,noSrc)=>{if(opts.terrain)bloc.__terrain=true;if(opts.replace)bloc.__replace=true;if(bloc.date&&/^\d{4}-\d{2}-\d{2}$/.test(bloc.date))date=bloc.date;
+      const go=(bloc,noSrc)=>{if(opts.terrain)bloc.__terrain=true;if(opts.inbox)bloc.__inbox=opts.inbox;if(opts.replace)bloc.__replace=true;if(bloc.date&&/^\d{4}-\d{2}-\d{2}$/.test(bloc.date))date=bloc.date;
         if(pc&&((S.groups.get(gid).ctx||{})[date]||"")!==pc){const gg=JSON.parse(JSON.stringify(S.groups.get(gid)));gg.ctx=gg.ctx||{};gg.ctx[date]=pc;S.groups.set(gid,gg);persist("groups",gid)}
         if(!sugOn)(bloc.extraits||[]).forEach(x=>{x.cases=[];x.pasencore=[];x.reperes=[];x.soutien=[];x.facilitateurs=[];x.objectif=null});
         reviewItems(s,gid,date,bloc,kids,keepSrc&&!noSrc?stripBloc(text):"",bloc.__next)};
@@ -2810,6 +2812,7 @@ function reviewItems(s,gid,date,bloc,kids,srcText,onNext){
     if(bloc.__replace)removeExported(gid,date);
     if(bloc.__terrain)childrenOf(gid).forEach(([cid,c])=>{if(!(c.notes||[]).some(n=>n.date===date&&n.src==="terrain"))return;const x=JSON.parse(JSON.stringify(S.children.get(cid)));x.notes=x.notes.filter(n=>!(n.date===date&&n.src==="terrain"));S.children.set(cid,x);persist("children",cid)});
     const gg=JSON.parse(JSON.stringify(S.groups.get(gid)));
+    if(bloc.__inbox)gg.inbox=(gg.inbox||[]).filter(q=>!bloc.__inbox.includes(q.id));
     if(toJournal.length)gg.journal=(gg.journal||[]).concat(toJournal.map(t=>({id:uid("j"),date,text:t.text,theme:t.theme,src:"groupe",by})));
     if(srcText)gg.journal=(gg.journal||[]).concat({id:uid("j"),date,text:srcText,theme:"source",src:"groupe",by});
     const pr=[...s.querySelectorAll(".rpres:checked")].map(x=>x.value);gg.imports=gg.imports||{};const gi=gg.imports[date]=gg.imports[date]||{pres:[],obj:[]};
