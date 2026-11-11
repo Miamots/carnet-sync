@@ -71,7 +71,7 @@ const IA={rules(){const d=LOCAL.cache.get("config/ia");return d&&typeof d.regles
   set(v){try{localStorage.setItem("carnet-ia",v?"1":"0")}catch(e){}IA.apply()},
   apply(){sample=SYNC.on&&IA.on()?IA.sampler():null},
   table(){const pairs=[],back={};let k=0,a=0;
-    S.children.forEach(c=>{if(!c||!c.name)return;const t=tok("Enfant",k++);back[t]=c.name;(typeof kidNames==="function"?kidNames(c):[c.name]).forEach(n=>pairs.push([n,t]))});
+    S.children.forEach(c=>{if(!c||!c.name)return;const t=tok("Enfant",k++);back[t]=c.name;(typeof kidNames==="function"?kidNames(c):[c.name]).forEach(n=>pairs.push([n,t]));if(c.nom){pairs.push([c.name+" "+c.nom,t]);String(c.nom).split(/[\s-]+/).filter(w=>w.length>2).forEach(w=>pairs.push([w,t]));pairs.push([c.nom,t])}});
     const ad=new Set();try{if(getMe())ad.add(getMe())}catch(e){}try{(getSign()||[]).forEach(x=>x&&x.nom&&ad.add(x.nom))}catch(e){}(SYNC._mem||[]).forEach(m=>m.display_name&&ad.add(m.display_name));IA.noms().forEach(n=>ad.add(n));
     const STOP=new Set(["le","la","les","de","du","des","l","d","école","ecole","cpe","centre","et"]);
     ad.forEach(full=>{const t=tok("Adulte",a++);const W=full.split(/\s+/);back[t]=W.length>1&&W.every(w=>/^\p{Lu}/u.test(w))?W[0]:full;W.filter(w=>w.length>2&&/^\p{Lu}/u.test(w)&&!STOP.has(w.toLowerCase())).forEach(w=>pairs.push([w,t]));pairs.push([full,t])});
@@ -297,7 +297,7 @@ const CONS=window.CONS={DESC_DEF:"Le projet a pour but de stimuler les habileté
       const h=[...new Uint8Array(await crypto.subtle.digest("SHA-256",enc.encode(txt)))].map(x=>x.toString(16).padStart(2,"0")).join("");
       const E=data.enfant||{};
       mutChild(cid,x=>{const r=(x.consents||[]).find(z=>z.token===row.token);if(!r)return;Object.assign(r,{status:"signe",signedAt:row.used_at||data.at,data,hash:h});
-        if(!x.dob&&/^\d{4}-\d{2}-\d{2}$/.test(E.ddn||""))x.dob=E.ddn;const lg=[E.l1,E.l2,E.l3].filter(v=>String(v||"").trim()).join(", ");if(!x.langues&&lg)x.langues=lg;
+        if(!x.dob&&/^\d{4}-\d{2}-\d{2}$/.test(E.ddn||""))x.dob=E.ddn;if(!x.nom&&E.nom){const pr=String(x.name||"").trim().toLowerCase(),full=String(E.nom).trim();if(full.toLowerCase().startsWith(pr+" ")&&full.length>pr.length+1)x.nom=full.slice(pr.length+1).trim()}const lg=[E.l1,E.l2,E.l3].filter(v=>String(v||"").trim()).join(", ");if(!x.langues&&lg)x.langues=lg;
         x.infos=Object.assign({},x.infos||{},{nomComplet:E.nom||"",adresse:E.adresse||"",tel:E.tel||"",courriel:E.courriel||"",allergies:E.allergies?("Oui : "+(E.allergies_detail||"")):"Non",poids:E.poids||"",maj:todayISO(),src:"consentement"})});
       try{await SYNC.be.consDelete(row.token)}catch(e){}toast("Consentement reçu pour "+(S.children.get(cid)||{}).name)}},
   docHTML(cid,rid){const c=S.children.get(cid);const r=(c.consents||[]).find(x=>x.id===rid);if(!r||!r.data)return "";const D=r.data,E=D.enfant||{},T=D.textes||{};const ech=CONS.echeance(r);

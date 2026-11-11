@@ -50,6 +50,7 @@ const ITEMS=[
  {k:"stockage",s:"carnet",t:"Je consens à ce que les observations soient conservées dans un carnet numérique chiffré, hébergé sur un serveur au Canada, accessible seulement aux professionnelles qui accompagnent mon enfant.",w:"Ça veut dire : les notes sont protégées par un mot de passe que seules les intervenantes connaissent."},
  {k:"ia",s:"carnet",t:"J'accepte que des outils d'intelligence artificielle aident les professionnelles à mettre leurs notes au propre, sans jamais recevoir le nom de mon enfant.",w:"Ça veut dire : un outil aide à écrire les notes plus vite. Le nom de votre enfant est remplacé par un code avant l'envoi. Les professionnelles relisent tout."},
  {k:"risque",s:"risque",t:"J'ai lu le texte sur la prise de risque saine et je consens à ce que mon enfant participe aux activités nature avec une prise de risque saine, sous la supervision des professionnelles présentes.",w:""}];
+const SHOW_WHY=false; // textes « Ça veut dire » gardés pour plus tard (audios phase 2)
 const SEC={projet:"Le projet",services:"Les services",partage:"Partage de renseignements",photos:"Photos et vidéos",carnet:"Les notes et le carnet",risque:"Prise de risque saine"};
 const RISQUE=`<p>Dans le cadre des sorties nature, nous encourageons la prise de risque saine et réfléchie pour favoriser le développement des enfants. Nous croyons que l'exploration et les défis adaptés sont essentiels au développement de l'autonomie, de la confiance en soi et des compétences motrices et sensorielles.</p>
 <p>Afin de veiller à la santé et à la sécurité des enfants, nous, en tant qu'adultes responsables, nous engageons à :</p><ul><li>éliminer les dangers réels par des évaluations régulières des bénéfices et des risques;</li><li>superviser les activités pour que les risques pris par les enfants soient appropriés à leur âge et à leur niveau de compétence;</li><li>intervenir de manière proactive pour prévenir les accidents, sans empêcher les enfants de prendre des risques calculés.</li></ul>
@@ -69,32 +70,32 @@ async function boot(){if(!TOKEN||!KEYRAW){$("#app").innerHTML=`<div class="card 
   try{const d=JSON.parse(localStorage.getItem(DK)||"null");if(d)ST=Object.assign(ST,d)}catch(e){}
   if(!ST.e.nom&&META.e)ST.e.nom=META.e;draw()}
 const yn=k=>`<div class="yn" data-k="${k}"><button type="button" class="oui ${ST.r[k]===true?"on":""}" data-v="1">Oui</button><button type="button" class="non ${ST.r[k]===false?"on":""}" data-v="0">Non</button></div>`;
-const qHTML=it=>`<div class="q" id="q-${it.k}"><p>${esc(it.t)}</p>${it.l?`<ul class="names">${it.l.map(n=>`<li>${esc(n)}</li>`).join("")}</ul>`:""}${it.w?`<p class="why">${esc(it.w)}</p>`:""}${yn(it.k)}</div>`;
+const qHTML=it=>`<div class="q" id="q-${it.k}"><p>${esc(it.t)}</p>${it.l?`<ul class="names">${it.l.map(n=>`<li>${esc(n)}</li>`).join("")}</ul>`:""}${SHOW_WHY&&it.w?`<p class="why">${esc(it.w)}</p>`:""}${yn(it.k)}</div>`;
 const inp=(k,lab,type,opt)=>`<label class="f">${lab}${opt?' <span class="muted small">(facultatif)</span>':""}<input data-e="${k}" type="${type||"text"}" value="${esc(ST.e[k]||"")}" ${type==="tel"?'inputmode="tel" autocomplete="tel"':""}></label>`;
 const QUAL=["Mère","Père","Tutrice","Tuteur","Autre titulaire de l'autorité parentale"];
 const parent=i=>`<div class="pp"><label class="f">Votre nom complet${i?" (2e parent)":""}<input data-p="${i}" data-pk="nom" value="${esc(ST.p[i].nom)}" autocomplete="${i?"off":"name"}"></label>
   <label class="f">En qualité de<select data-p="${i}" data-pk="qualite"><option value="">Choisir…</option>${QUAL.map(q=>`<option ${ST.p[i].qualite===q?"selected":""}>${q}</option>`).join("")}</select></label></div>`;
-function draw(){const sec=s=>ITEMS.filter(x=>x.s===s).map(qHTML).join("");
-  $("#app").innerHTML=`<header><img src="assets/logo-coclinique.png" alt="CO Clinique"><img src="assets/logo-caal.png" alt="CAAL"></header>
-  <h1>Formulaire de consentement</h1><p class="muted" style="margin:0">Pour <b>${esc(META.e||"votre enfant")}</b>${META.g?" · "+esc(META.g):""}<br><span class="small">Environ 3 minutes. Vos réponses restent sur ce téléphone si vous êtes interrompu.</span></p>
-  <div class="card"><h2>Vous</h2><p class="small muted" style="margin:0">Titulaire de l'autorité parentale.</p>${parent(0)}
-    ${ST.two?parent(1)+`<button type="button" class="btn ghost" id="rm2" style="margin-top:8px">Retirer le 2e parent</button>`:`<button type="button" class="btn ghost" id="add2" style="margin-top:10px">+ Ajouter un 2e parent</button>`}</div>
-  <div class="card"><h2>${SEC.projet}</h2><p>${esc(META.desc||"")}</p>${sec("projet")}</div>
-  <div class="card"><h2>Votre enfant</h2>${inp("nom","Prénom et nom de l'enfant")}${inp("ddn","Date de naissance","date")}${inp("adresse","Adresse")}${inp("tel","Numéro de téléphone du parent","tel")}${inp("courriel","Courriel","email",1)}
+const STEPS=["Vous","Le projet","Votre enfant","Les services","Partage de renseignements","Photos et vidéos","Les notes et le carnet","Prise de risque saine","Signature"];
+function stepHTML(n){const sec=k=>ITEMS.filter(x=>x.s===k).map(qHTML).join("");
+  if(n===0)return `<p class="small muted" style="margin:0">Titulaire de l'autorité parentale.</p>${parent(0)}${ST.two?parent(1)+`<button type="button" class="btn ghost" id="rm2" style="margin-top:8px">Retirer le 2e parent</button>`:`<button type="button" class="btn ghost" id="add2" style="margin-top:10px">+ Ajouter un 2e parent</button>`}`;
+  if(n===1)return `<p>${esc(META.desc||"")}</p>${sec("projet")}`;
+  if(n===2)return `${inp("nom","Prénom et nom de l'enfant")}${inp("ddn","Date de naissance","date")}${inp("adresse","Adresse")}${inp("tel","Numéro de téléphone du parent","tel")}${inp("courriel","Courriel","email",1)}
     <div class="q" id="q-allergies" style="border:0;padding-bottom:0"><p style="font-weight:600;margin:12px 0 6px">Allergies</p>${yn("allergies")}${ST.r.allergies===true?inp("allergies_detail","Lesquelles?"):""}</div>
-    ${inp("poids","Poids (kg ou lb)")}
-    <label class="f">Langues parlées par mon enfant</label><div class="row">${["l1","l2","l3"].map((k,i)=>`<input data-e="${k}" placeholder="${["Langue principale","2e langue","3e langue"][i]}" value="${esc(ST.e[k]||"")}">`).join("")}</div></div>
-  <div class="card"><h2>${SEC.services}</h2>${sec("services")}</div>
-  <div class="card"><h2>${SEC.partage}</h2>${sec("partage")}</div>
-  <div class="card"><h2>${SEC.photos}</h2>${sec("photos")}</div>
-  <div class="card"><h2>${SEC.carnet}</h2>${sec("carnet")}</div>
-  <div class="card"><h2>${SEC.risque}</h2><div class="small">${RISQUE}</div>${sec("risque")}</div>
-  <div class="card"><h2>Vos droits</h2><p class="small" style="margin:0">${esc(DROITS)}</p></div>
-  <div class="card"><h2>Signature</h2><p class="small muted" style="margin:0">Signez avec votre doigt dans le cadre. En signant, vous confirmez vos réponses ci-dessus.</p>
+    ${inp("poids","Poids (kg ou lb)")}<label class="f">Langues parlées par mon enfant</label><div class="row">${["l1","l2","l3"].map((k,i)=>`<input data-e="${k}" placeholder="${["Langue principale","2e langue","3e langue"][i]}" value="${esc(ST.e[k]||"")}">`).join("")}</div>`;
+  if(n===3)return sec("services");if(n===4)return sec("partage");if(n===5)return sec("photos");if(n===6)return sec("carnet");
+  if(n===7)return `<div class="small">${RISQUE}</div>${sec("risque")}`;
+  return `<p class="small" style="margin:0 0 10px">${esc(DROITS)}</p><p class="small muted" style="margin:0">Signez avec votre doigt dans le cadre. En signant, vous confirmez vos réponses.</p>
     ${[0].concat(ST.two?[1]:[]).map(i=>`<p style="margin:12px 0 0;font-weight:600">${esc(ST.p[i].nom||(i?"2e parent":"Parent"))}</p><canvas class="sig" id="sig${i}"></canvas><button type="button" class="btn ghost" data-clr="${i}" style="margin-top:6px">Effacer</button>`).join("")}
-    <p class="small muted">Date : ${new Date().toLocaleDateString("fr-CA",{day:"numeric",month:"long",year:"numeric"})}</p>
-    <div id="err"></div><button class="btn" id="send">Envoyer le formulaire</button></div>`;
-  bind()}
+    <p class="small muted">Date : ${new Date().toLocaleDateString("fr-CA",{day:"numeric",month:"long",year:"numeric"})}</p>`}
+function draw(){const n=Math.min(ST.step||0,STEPS.length-1);const last=n===STEPS.length-1;
+  $("#app").innerHTML=`<header><img src="assets/logo-coclinique.png" alt="CO Clinique"><img src="assets/logo-caal.png" alt="CAAL"></header>
+  <h1>Formulaire de consentement</h1><p class="muted" style="margin:0">Pour <b>${esc(META.e||"votre enfant")}</b>${META.g?" · "+esc(META.g):""}</p>
+  <div style="margin:12px 0 4px;display:flex;justify-content:space-between" class="small muted"><span>Étape ${n+1} sur ${STEPS.length}</span><span>${n===0?"Environ 3 minutes":""}</span></div>
+  <div style="height:8px;background:#E4DCCB;border-radius:99px;overflow:hidden"><div style="height:100%;width:${Math.round((n+1)/STEPS.length*100)}%;background:var(--forest)"></div></div>
+  <div class="card"><h2>${STEPS[n]}</h2>${stepHTML(n)}<div id="err"></div></div>
+  <div style="display:flex;gap:10px">${n?`<button class="btn ghost" id="back" style="flex:0 0 auto;width:auto;margin-top:12px;padding:13px 18px">Retour</button>`:""}<button class="btn" id="${last?"send":"next"}" style="flex:1">${last?"Envoyer le formulaire":"Suivant"}</button></div>
+  ${n===0?`<p class="small muted" style="text-align:center">Vos réponses restent sur ce téléphone si vous êtes interrompu.</p>`:""}`;
+  bind();window.scrollTo(0,0)}
 function bind(){
   document.querySelectorAll(".yn button").forEach(b=>b.onclick=()=>{const k=b.parentNode.dataset.k;ST.r[k]=b.dataset.v==="1";save();
     if(k==="allergies"){draw();return}b.parentNode.querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b));b.closest(".q")&&b.closest(".q").classList.remove("miss")});
@@ -104,19 +105,23 @@ function bind(){
   const r2=$("#rm2");if(r2)r2.onclick=()=>{ST.two=false;ST.p=[ST.p[0]];ST.sig[1]=null;save();draw()};
   document.querySelectorAll("canvas.sig").forEach(cv=>pad(cv,+cv.id.slice(3)));
   document.querySelectorAll("[data-clr]").forEach(b=>b.onclick=()=>{ST.sig[+b.dataset.clr]=null;save();const cv=$("#sig"+b.dataset.clr);cv.getContext("2d").clearRect(0,0,cv.width,cv.height)});
-  $("#send").onclick=send}
+  const nx=$("#next");if(nx)nx.onclick=()=>{if(check(ST.step||0,true))return;ST.step=(ST.step||0)+1;save();draw()};
+  const bk=$("#back");if(bk)bk.onclick=()=>{ST.step=Math.max(0,(ST.step||0)-1);save();draw()};
+  const sd=$("#send");if(sd)sd.onclick=send}
+function missing(n){const L=[];
+  if(n===0)[0].concat(ST.two?[1]:[]).forEach(i=>{if(!String(ST.p[i].nom||"").trim())L.push(`[data-p="${i}"][data-pk="nom"]`);if(!ST.p[i].qualite)L.push(`[data-p="${i}"][data-pk="qualite"]`)});
+  if(n===2){["nom","ddn","adresse","tel","poids"].forEach(k=>{if(!String(ST.e[k]||"").trim())L.push(`[data-e="${k}"]`)});if(ST.r.allergies===undefined)L.push("#q-allergies");if(ST.r.allergies===true&&!String(ST.e.allergies_detail||"").trim())L.push('[data-e="allergies_detail"]')}
+  const sk=["","projet","","services","partage","photos","carnet","risque"][n];if(sk)ITEMS.filter(it=>it.s===sk).forEach(it=>{if(ST.r[it.k]===undefined)L.push("#q-"+it.k)});
+  if(n===STEPS.length-1)[0].concat(ST.two?[1]:[]).forEach(i=>{if(!ST.sig[i])L.push("#sig"+i)});return L}
+function check(n,show){const L=missing(n);if(!L.length)return false;if(show){L.forEach(sel=>{const el=document.querySelector(sel);if(!el)return;(el.closest("label")||el).classList.add("miss")});
+  $("#err").innerHTML=`<div class="notice err" style="margin-top:10px">Il manque ${L.length} réponse${L.length>1?"s":""} (en rouge).</div>`;const f=document.querySelector(".miss");f&&f.scrollIntoView({behavior:"smooth",block:"center"})}return true}
 function pad(cv,i){const r=cv.getBoundingClientRect(),dpr=window.devicePixelRatio||1;cv.width=r.width*dpr;cv.height=r.height*dpr;const x=cv.getContext("2d");x.scale(dpr,dpr);x.lineWidth=2.4;x.lineCap="round";x.lineJoin="round";x.strokeStyle="#1f2a22";
   if(ST.sig[i]){const im=new Image();im.onload=()=>x.drawImage(im,0,0,r.width,r.height);im.src=ST.sig[i]}
   let on=false,moved=false;const P=e=>{const b=cv.getBoundingClientRect();return [e.clientX-b.left,e.clientY-b.top]};
   cv.onpointerdown=e=>{on=true;moved=false;cv.setPointerCapture(e.pointerId);const [a,b]=P(e);x.beginPath();x.moveTo(a,b)};
   cv.onpointermove=e=>{if(!on)return;const [a,b]=P(e);x.lineTo(a,b);x.stroke();moved=true};
   cv.onpointerup=cv.onpointercancel=()=>{if(!on)return;on=false;if(moved){ST.sig[i]=cv.toDataURL("image/png");cv.classList.remove("miss");save()}}}
-async function send(){const miss=[];const mark=el=>{if(el){el.classList.add("miss");miss.push(el)}};
-  [0].concat(ST.two?[1]:[]).forEach(i=>{if(!String(ST.p[i].nom||"").trim())mark(document.querySelector(`[data-p="${i}"][data-pk="nom"]`).closest("label"));if(!ST.p[i].qualite)mark(document.querySelector(`[data-p="${i}"][data-pk="qualite"]`).closest("label"));if(!ST.sig[i])mark($("#sig"+i))});
-  ["nom","ddn","adresse","tel","poids"].forEach(k=>{if(!String(ST.e[k]||"").trim())mark(document.querySelector(`[data-e="${k}"]`).closest("label"))});
-  if(ST.r.allergies===undefined)mark($("#q-allergies"));if(ST.r.allergies===true&&!String(ST.e.allergies_detail||"").trim())mark(document.querySelector('[data-e="allergies_detail"]').closest("label"));
-  ITEMS.forEach(it=>{if(ST.r[it.k]===undefined)mark($("#q-"+it.k))});
-  if(miss.length){$("#err").innerHTML=`<div class="notice err" style="margin-top:10px">Il manque ${miss.length} réponse${miss.length>1?"s":""} (en rouge).</div>`;miss[0].scrollIntoView({behavior:"smooth",block:"center"});return}
+async function send(){for(let n=0;n<STEPS.length;n++){if(missing(n).length){if(n!==(ST.step||0)){ST.step=n;save();draw()}check(n,true);return}}
   const b=$("#send");b.disabled=true;b.textContent="Envoi…";
   const at=new Date().toISOString();
   const payload={v:1,at,parents:ST.p.slice(0,ST.two?2:1).map((p,i)=>({nom:p.nom.trim(),qualite:p.qualite,sig:ST.sig[i]})),enfant:Object.assign({},ST.e,{allergies:ST.r.allergies,allergies_detail:ST.r.allergies?ST.e.allergies_detail||"":""}),

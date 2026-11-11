@@ -1199,10 +1199,10 @@ function viewTerrain(gid){const g=S.groups.get(gid);if(!g){go("accueil");return 
   <div class="tgrid">${kids.map(([cid,c])=>{const done=dayTouched(c,d);const ao=aObserver(c);const isP=pr.includes(cid);
     return `<button class="tkid${done?" done":""}${pr.length&&!isP?" abs":""}" data-act="tKid" data-id="${gid}" data-c="${cid}"><span class="tav"><img src="${avSrc(c)}"${avAt(c)} alt="">${done?`<i class="ok">✓</i>`:`<i class="todo"></i>`}</span><b>${starH(c)}${esc(c.name)}</b><span class="tao">${ao.slice(0,2).map(x=>`<span class="${x.t}">${AOI[x.t]} ${esc(x.label.length>48?x.label.slice(0,46)+"…":x.label)}</span>`).join("")}</span></button>`}).join("")}</div>
   <section class="card"><div class="row-actions"><button class="btn primary" data-act="tBilan" data-id="${gid}">Bilan de la journée</button>${sample?iaBtn(gid):`<button class="btn" data-act="expDay" data-id="${gid}">Exporter mes notes du jour</button>`}<a class="btn ghost" href="#g-${gid}">Page du groupe</a></div>
-  <p class="muted small" style="margin:6px 0 0">✓ = déjà noté aujourd'hui · point orange = rien encore. 🎯 objectif · ↻ pas encore à revoir · 🌱 repère de son âge jamais observé · 👀 occupation peu documentée.</p></section>`;
+  <p class="muted small" style="margin:6px 0 0">✓ = déjà noté aujourd'hui · point orange = rien encore.</p></section>`;
   return h}
 function terrainKid(gid,cid){const g=S.groups.get(gid);const c=S.children.get(cid);const d=S.obsDate;if(!c)return;
-  const objs=childObjs(c).filter(o=>!o.done);const gobjs=g.objectifs||[];const res=objRes(g,d);const ao=aObserver(c).filter(x=>x.t!=="obj");
+  const objs=childObjs(c).filter(o=>!o.done);const gobjs=g.objectifs||[];const res=objRes(g,d);const ao=[];
   const notesT=(c.notes||[]).filter(n=>n.date===d);const phT=photosOf(c,p=>p.d===d);
   const tri=isObjOnly(c);const mk=(v,cur,attrs)=>v==="ok"?`<button class="tm odot ${cur||"vide"}" ${attrs} data-cyc="1" aria-label="Changer le niveau">${cur?omk(cur):""}</button>`:"";
   openSheet(`<div class="thead"><img src="${avSrc(c)}"${avAt(c)} alt=""><div><h3 style="margin:0">${starH(c)}${esc(c.name)}</h3><span class="muted small">${esc(fmtD(d,true))}</span></div></div>
@@ -1934,7 +1934,7 @@ function viewChild(cid,secId){ensureRepaired(cid);
   if(!secId&&window.CONS)h+=CONS.card(cid);
   const OO=orderedOccs(c);const hasSP=!!(c.prio&&c.prio.occs);
   if(!secId&&isObjOnly(c)){h+=portraitObjHTML(cid,c);h+=notesHTML(cid,c,["portrait"],"Notes","Ce que vous observez…");h+=`<section class="card"><p class="muted small" style="margin:0">Fiche 5-12 ans : on suit 2 ou 3 objectifs, sans portrait complet. Les occupations et les repères restent disponibles au besoin.</p><div class="row-actions" style="margin-top:8px">${OCCS.map(o=>`<a class="btn small" href="#e-${cid}--${o.subs[0]}">${esc(shortT(o.titre))}</a>`).join("")}<a class="btn small" href="#e-${cid}--portrait">Forces et défis</a></div></section>`;return h}
-  if(!secId){h+=aoHTML(c);
+  if(!secId){
     const om=S.orderMode;
     h+=`<section class="card"><div class="ordhead"><h3 style="font-size:1.35rem">Occupations${hasSP?' <span class="muted small" style="font-family:var(--font-body);font-weight:400">par ordre de priorité</span>':""}</h3>${ordOn()||om?`<button class="btn${om?" primary":""}" data-act="orderMode">${om?"Terminer":"Ordonner par priorité"}</button>`:""}</div><p class="muted small" style="margin:4px 0 10px">${om?"Montez ou descendez les occupations. La première est la plus prioritaire. Masquez celles qui ne sont pas une priorité : elles restent accessibles plus bas.":"Touchez une occupation pour cocher les repères. Chaque case cochée garde la date d'observation choisie plus haut."}</p><div class="secgrid">`;
     const hidO=OO.filter(o=>isHidOcc(c,o.id));let hidHTML="";
@@ -2741,10 +2741,16 @@ function actThumbs(c,ph,phO,cid,sid){if(!ph.length&&!phO.length)return "";const 
   return `<div class="thumbs">${ph.map(p=>bt(p)).join("")}${phO.slice(0,3).map(p=>bt(p,1)).join("")}${phO.length>3?`<a class="thumb more" href="#e-${cid}--${sid}">+${phO.length-3}</a>`:""}</div>`}
 function thumbs(c,list,cid){return list.length?`<div class="thumbs">${list.map(p=>`<button class="thumb" data-act="viewPhoto" data-id="${cid}" data-p="${p.id}" aria-label="Voir la photo"><img src="${blobSrc(p.id)}" data-pid="${p.id}" alt="" loading="lazy"></button>`).join("")}</div>`:""}
 function photoSheet(cid,pid){const c=S.children.get(cid);const p=(c.photos||[]).find(x=>x.id===pid);if(!p)return;
+  const PL=(c.photos||[]).slice().sort((a,b)=>String(a.d||"").localeCompare(String(b.d||""))||String(a.at||"").localeCompare(String(b.at||"")));const pi=PL.findIndex(x=>x.id===pid);
   const cx=ctxOf(c.groupId,p.d);const lab=stepLabel(c,p.k)||secTitle(tpl(S.groups.get(c.groupId)),p.k.split(".")[0]);
-  openSheet(`<img class="bigphoto" src="${blobSrc(p.id)}" data-pid="${p.id}" alt=""><div><b>${esc(c.name)}</b> · ${fmtD(p.d,true)}${cx?" · "+esc(cx):""}</div><div class="muted small">${esc(lab)}</div>
+  openSheet(`<div class="phnav" style="position:relative;touch-action:pan-y"><img class="bigphoto" id="phImg" src="${blobSrc(p.id)}" data-pid="${p.id}" alt="" draggable="false">${PL.length>1?`<button class="phbtn" data-phn="-1" aria-label="Photo précédente" style="position:absolute;left:4px;top:50%;transform:translateY(-50%);width:40px;height:40px;border-radius:50%;border:0;background:rgba(255,255,255,.85);font-size:1.4rem">‹</button><button class="phbtn" data-phn="1" aria-label="Photo suivante" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);width:40px;height:40px;border-radius:50%;border:0;background:rgba(255,255,255,.85);font-size:1.4rem">›</button><span class="small" style="position:absolute;right:8px;bottom:8px;background:rgba(0,0,0,.55);color:#fff;border-radius:999px;padding:1px 8px">${pi+1} / ${PL.length}</span>`:""}</div><div><b>${esc(c.name)}</b> · ${fmtD(p.d,true)}${cx?" · "+esc(cx):""}</div><div class="muted small">${esc(lab)}</div>
   <label class="f">Ranger sous…<select class="field" id="phK"><option value="portrait">Portrait (photos du terrain)</option>${OCCS.map(o=>`<optgroup label="${esc(o.titre)}">${occSecs(c,o).flatMap(sec=>sec.rows.filter(r=>!r.free).map(r=>`<option value="${sec.id}.${r.id}" ${String(p.k).startsWith(sec.id+"."+r.id)?"selected":""}>${esc(r.label)}</option>`)).join("")}</optgroup>`).join("")}</select></label>
   <div class="row-actions"><button class="btn primary" id="phMove">Ranger</button><button class="btn" id="phClose">Fermer</button>${assets?`<button class="btn danger" id="phDel" style="margin-left:auto">Supprimer</button>`:""}</div>`,s=>{
+    const go=dlt=>{if(PL.length<2)return;const q=PL[(pi+dlt+PL.length)%PL.length];photoSheet(cid,q.id)};
+    s.querySelectorAll("[data-phn]").forEach(b=>b.onclick=()=>go(+b.dataset.phn));
+    const box=s.querySelector(".phnav");let x0=null,y0=0;box.addEventListener("touchstart",e=>{x0=e.touches[0].clientX;y0=e.touches[0].clientY},{passive:true});
+    box.addEventListener("touchend",e=>{if(x0===null)return;const dx=e.changedTouches[0].clientX-x0,dy=e.changedTouches[0].clientY-y0;x0=null;if(Math.abs(dx)>45&&Math.abs(dx)>Math.abs(dy))go(dx<0?1:-1)});
+    const kh=e=>{if(!document.body.contains(box)){document.removeEventListener("keydown",kh);return}if(e.key==="ArrowRight")go(1);else if(e.key==="ArrowLeft")go(-1)};document.addEventListener("keydown",kh);
     s.querySelector("#phClose").onclick=closeSheet;s.querySelector("#phMove").onclick=()=>{const v=s.querySelector("#phK").value;mutChild(cid,x=>{const q=(x.photos||[]).find(z=>z.id===pid);if(q)q.k=v});closeSheet();toast("Photo rangée")};const del=s.querySelector("#phDel");if(del)del.onclick=()=>delPhoto(cid,pid)})}
 function stepSheet(cid,k,label){
   const draw=()=>{const c=S.children.get(cid);const ok=((c.checks||{})[k]||[]),ny=((c.notyet||{})[k]||[]);
@@ -2815,6 +2821,7 @@ function childSheet(cid,gid){const c=cid?S.children.get(cid):{name:"",avatar:AVA
   <label class="f">Prénom ou code<input class="field" id="cName" value="${esc(c.name)}" placeholder="Ex. : J.T. ou Renard"></label>
   <div class="f"><span style="font-weight:600;font-size:.92rem">Avatar</span><div class="avpick">${AVATARS.map(a=>`<button type="button" data-av="${a}" class="${c.avatar===a&&!hasFace(c)?"on":""}" title="${AVNOMS[a]}"><img src="${img("avatar-"+a)}" alt="${AVNOMS[a]}"></button>`).join("")}</div></div>
   ${cid?`<div class="f"><span style="font-weight:600;font-size:.92rem">Ou une photo de l'enfant</span><span class="muted small" style="display:block">Elle remplace l'avatar dans l'app seulement (pas dans les documents).</span>${assets?`<label class="btn small" style="margin:6px 0">📷 Prendre ou choisir une photo<input type="file" accept="image/*" hidden id="cFaceIn"></label>`:""}<div class="avpick facepick">${(c.photos||[]).slice().sort((a,b)=>(b.d||"").localeCompare(a.d||"")).slice(0,18).map(p=>`<button type="button" data-face="${p.id}" class="${c.face===p.id?"on":""}"><img src="${blobSrc(p.id)}" data-pid="${p.id}" alt=""></button>`).join("")}</div></div>`:""}
+  <label class="f">Nom de famille <span class="muted small">(seulement dans les documents officiels, jamais dans les listes)</span><input class="field" id="cNom" value="${esc(c.nom||"")}" autocomplete="off"></label>
   <label class="f">Autres façons d'écrire son prénom<input class="field" id="cAlias" value="${esc(c.alias||"")}" placeholder="Ex. : Rosemay, Rosemée (séparés par des virgules)"></label>
   <label class="f">Date de naissance<input type="date" class="field" id="cDob" value="${esc(c.dob||"")}"></label>
   <label class="f">Langue(s) à la maison<input class="field" id="cLang" value="${esc(c.langues||"")}" placeholder="Ex. : innu-aimun, français"></label>
@@ -2827,7 +2834,7 @@ function childSheet(cid,gid){const c=cid?S.children.get(cid):{name:"",avatar:AVA
     s.querySelector("#cSave").onclick=()=>{const name=s.querySelector("#cName").value.trim();if(!name){s.querySelector("#cName").focus();return}
       const id=cid||uid("c");const base=cid?JSON.parse(JSON.stringify(c)):{groupId:gid,checks:{},sout:{},free:{},notes:[],synth:{},facil:{},next:[],createdAt:todayISO()};
       if(cid){base.lvl={};s.querySelectorAll("[data-lvl]").forEach(sel=>{if(sel.value!==baseTpl(base))base.lvl[sel.dataset.lvl]=sel.value})}
-      if(face)base.face=face;else delete base.face;Object.assign(base,{name,avatar:av,alias:s.querySelector("#cAlias").value.trim(),dob:s.querySelector("#cDob").value,langues:s.querySelector("#cLang").value.trim()});
+      if(face)base.face=face;else delete base.face;Object.assign(base,{name,avatar:av,alias:s.querySelector("#cAlias").value.trim(),nom:(s.querySelector("#cNom")||{value:""}).value.trim(),dob:s.querySelector("#cDob").value,langues:s.querySelector("#cLang").value.trim()});
       S.children.set(id,base);persist("children",id);closeSheet();cid?render():go("e-"+id)};
   })}
 
@@ -3240,7 +3247,7 @@ render();
 if("serviceWorker" in navigator&&location.protocol==="https:")navigator.serviceWorker.register("sw.js").catch(()=>{});
 </script>
 <script>window.SYNC_CFG={"url": "https://lvwotuglgilspssufihp.supabase.co", "key": "sb_publishable_-CD7IcAGCJ9c_bwV7pIhiw_6OZXbFcB"}</script>
-<script src="supabase.js?v=carnet-sync-v11"></script>
-<script src="sync.js?v=carnet-sync-v11"></script>
+<script src="supabase.js?v=carnet-sync-v12"></script>
+<script src="sync.js?v=carnet-sync-v12"></script>
 </body>
 </html>
