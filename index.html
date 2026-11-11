@@ -1070,7 +1070,7 @@ function viewGroup(gid){S.fromTerrain=null;S.scOnly=null;
   h+=calendarHTML(gid,g);
 
   if(kids.length)h+=covHTML(gid,g,kids);else h+=`<section class="card"><h3 style="font-size:1.35rem">Récapitulatif du groupe</h3><button class="btn" data-act="recap" data-id="${gid}">Ouvrir le récapitulatif</button></section>`;
-  h+=`<div class="row-actions" style="justify-content:center;margin:4px 0 8px"><button class="btn" data-act="notesMenu" data-id="${gid}"><img src="${img("icone-coller-notes")}" alt="" style="width:22px;height:22px">Notes : importer et ranger</button></div>`;
+  h+=`<div class="row-actions" style="justify-content:center;margin:4px 0 8px">${sample?iaBtn(gid):`<button class="btn" data-act="notesMenu" data-id="${gid}"><img src="${img("icone-coller-notes")}" alt="" style="width:22px;height:22px">Notes : importer et ranger</button>`}</div>`;
   return h;
 }
 
@@ -1143,7 +1143,7 @@ function viewTerrain(gid){const g=S.groups.get(gid);if(!g){go("accueil");return 
   ${pr.length?`<label class="chk" style="margin-top:6px"><input type="checkbox" data-act="tOnly" ${only?"checked":""}> Présents seulement (${pr.length})</label>`:`<p class="muted small" style="margin:6px 0 0">Touchez un enfant pour noter : il sera marqué présent.</p>`}</section>
   <div class="tgrid">${kids.map(([cid,c])=>{const done=dayTouched(c,d);const ao=aObserver(c);const isP=pr.includes(cid);
     return `<button class="tkid${done?" done":""}${pr.length&&!isP?" abs":""}" data-act="tKid" data-id="${gid}" data-c="${cid}"><span class="tav"><img src="${avSrc(c)}"${avAt(c)} alt="">${done?`<i class="ok">✓</i>`:`<i class="todo"></i>`}</span><b>${starH(c)}${esc(c.name)}</b><span class="tao">${ao.slice(0,2).map(x=>`<span class="${x.t}">${AOI[x.t]} ${esc(x.label.length>48?x.label.slice(0,46)+"…":x.label)}</span>`).join("")}</span></button>`}).join("")}</div>
-  <section class="card"><div class="row-actions"><button class="btn primary" data-act="tBilan" data-id="${gid}">Bilan de la journée</button><button class="btn" data-act="expDay" data-id="${gid}">Exporter mes notes du jour</button><a class="btn ghost" href="#g-${gid}">Page du groupe</a></div>
+  <section class="card"><div class="row-actions"><button class="btn primary" data-act="tBilan" data-id="${gid}">Bilan de la journée</button>${sample?iaBtn(gid):`<button class="btn" data-act="expDay" data-id="${gid}">Exporter mes notes du jour</button>`}<a class="btn ghost" href="#g-${gid}">Page du groupe</a></div>
   <p class="muted small" style="margin:6px 0 0">✓ = déjà noté aujourd'hui · point orange = rien encore. 🎯 objectif · ↻ pas encore à revoir · 🌱 repère de son âge jamais observé · 👀 occupation peu documentée.</p></section>`;
   return h}
 function terrainKid(gid,cid){const g=S.groups.get(gid);const c=S.children.get(cid);const d=S.obsDate;if(!c)return;
@@ -1184,6 +1184,95 @@ function terrainBilan(gid){const g=S.groups.get(gid);const d=S.obsDate;const pr=
 function terrainRanger(gid){const d=S.obsDate;const lines=[];childrenOf(gid).forEach(([cid,c])=>(c.notes||[]).filter(n=>n.date===d&&n.src==="terrain").forEach(n=>lines.push(c.name+" : "+n.text)));
   if(!lines.length){toast("Aucune note du terrain à ranger pour cette date.");return}
   pasteSheet(gid,d,{prefill:lines.join("\n"),terrain:true})}
+/* ---------- IA : tout ranger et corriger (une seule passe, toutes dates) ---------- */
+function iaPending(gid){const g=S.groups.get(gid);if(!g)return [];const out=[];
+  (g.inbox||[]).forEach(q=>{if(String(q.text||"").trim())out.push({kind:"q",id:q.id,date:q.date,text:q.text,kids:q.kids||[]})});
+  childrenOf(gid).forEach(([cid,c])=>{
+    (c.notes||[]).forEach(n=>{if(!n.clean&&String(n.text||"").trim())out.push({kind:"n",cid,id:n.id,date:n.date,text:n.text,dest0:iaCur(c,n)})});
+    Object.entries(c.free||{}).forEach(([k,l])=>(l||[]).forEach(n=>{if(!n.clean&&String(n.text||"").trim())out.push({kind:"f",cid,k,id:n.id,date:n.date,text:n.text})}));
+    (c.explore||[]).forEach(n=>{if(!n.clean&&String(n.text||"").trim())out.push({kind:"x",cid,id:n.id,date:n.date,text:n.text})})});
+  return out}
+function iaCur(c,n){if(isObjOnly(c))return n.cobj&&childObjs(c).some(o=>o.id===n.cobj)?n.cobj:"cat:"+noteCat(n);return n.k||n.section||"portrait"}
+function iaDests(c){if(!c)return [];if(isObjOnly(c))return childObjs(c).map(o=>[o.id,"🎯 "+objShort(o)]).concat(NCATS.map(([k,l])=>["cat:"+k,"Autres observations · "+l]));
+  const T=tpl(S.groups.get(c.groupId));return [["portrait","Portrait"]].concat(T.sections.flatMap(x=>[[x.id,x.titre+" (général)"]].concat(x.rows.filter(r=>!r.free).map(r=>[x.id+"."+r.id,x.titre+" › "+r.label]))))}
+function iaPrompt(gid,chunk){const g=S.groups.get(gid);const kids=childrenOf(gid);const nm=cid=>(S.children.get(cid)||{}).name||"?";
+  const obj=tpl(g).objOnly;const hasQ=chunk.some(it=>it.kind==="q");
+  const who=new Set(chunk.filter(it=>it.cid).map(it=>it.cid));if(hasQ)kids.forEach(([k])=>who.add(k));
+  const codes=obj?[...who].map(cid=>{const c=S.children.get(cid);return `${c.name} : ${iaDests(c).map(([k,l])=>k+" = "+l.replace("🎯 ","objectif : ")).join(" | ")}`}).join("\n")
+    :`Codes communs à tous les enfants : ${iaDests(kids[0]&&kids[0][1]).map(([k,l])=>k+" = "+l).join(" | ")}\nEnfants : ${kids.map(([,c])=>c.name).join(", ")}`;
+  const lab={n:"N",f:"F",x:"X",q:"Q"};
+  return `Tu aides une ergothérapeute à mettre de l'ordre dans ses notes d'observation de classe nature (groupe ${g.name}). Pour CHAQUE note étiquetée :
+1. CORRIGE-LA : orthographe, ponctuation, phrases claires, sans hésitations (euh, pis…) ni répétitions, en français simple et professionnel. Garde TOUS les faits, le sens et les mots de l'enfant entre guillemets. N'ajoute rien, n'interprète pas, ne résume pas. Si la note est déjà correcte, renvoie-la exactement identique.
+2. RANGE-LA (notes N et Q seulement) : choisis "dest" parmi les codes de l'enfant ci-dessous. Si la note a déjà un rangement (« actuel »), garde-le, sauf si un objectif de l'enfant correspond clairement mieux. Sinon, prends la catégorie la plus juste${obj?"":" ou « portrait »"}.
+Les notes [Q…] sont des notes rapides : trouve le ou les enfants concernés (les prénoms peuvent être mal écrits ou mal dictés : prends le bon prénom de la liste) et fais un extrait par enfant, rédigé pour lui. Si un enfant est déjà indiqué, il est concerné.
+Les notes [F…] et [X…] : corrige seulement.
+
+ENFANTS ET CODES DE RANGEMENT
+${codes}
+
+NOTES
+${chunk.map(it=>`[${lab[it.kind]}${it.n}] ${it.kind==="q"?(it.kids.length?"enfants indiqués : "+it.kids.map(nm).join(", "):"enfant à trouver"):nm(it.cid)+(it.kind==="n"?" · actuel : "+it.dest0:"")} · ${it.date||""} : ${it.text}`).join("\n")}
+
+Réponds seulement en JSON : {"N1":{"texte":"…","dest":"code"},"F2":{"texte":"…"},"Q3":[{"enfant":"Prénom","texte":"…","dest":"code"}]}`}
+async function iaRun(gid){if(!sample){toast("L'IA n'est pas activée.");return}
+  const all=iaPending(gid);if(!all.length){toast("Tout est déjà rangé et corrigé.");return}
+  all.forEach((it,i)=>it.n=i+1);
+  const chunks=[];let cur=[],len=0;all.forEach(it=>{if(cur.length>=30||len>7000){chunks.push(cur);cur=[];len=0}cur.push(it);len+=it.text.length});if(cur.length)chunks.push(cur);
+  let stop=false;
+  openSheet(`<h3>Tout ranger et corriger</h3><p id="iaProg"><span class="spinner" style="border-color:rgba(0,0,0,.2);border-top-color:var(--forest)"></span> ${all.length} note${all.length>1?"s":""} en lecture…</p><p class="muted small">Les prénoms sont remplacés par des codes avant l'envoi. Rien n'est enregistré avant votre relecture.</p><div class="row-actions"><button class="btn" id="iaStop">Annuler</button></div>`,s=>{s.querySelector("#iaStop").onclick=()=>{stop=true;closeSheet()}});
+  const res={};
+  for(let i=0;i<chunks.length;i++){if(stop)return;const p=document.getElementById("iaProg");if(p&&chunks.length>1)p.lastChild.textContent=` Lot ${i+1} sur ${chunks.length} (${all.length} notes)…`;
+    try{Object.assign(res,await sample.json(iaPrompt(gid,chunks[i]),{modelTier:"default"})||{})}
+    catch(e){if(stop)return;closeSheet();toast(e&&e.code==="rate_limited"?"Trop de demandes. Réessayez dans une minute.":"La lecture n'a pas fonctionné"+(e&&e.message?" : "+e.message:"."));if(!Object.keys(res).length)return;break}}
+  if(!stop)iaReview(gid,all,res)}
+function iaKid(gid,name){const n=norm(String(name||""));if(!n)return "";const L=childrenOf(gid);const hit=L.find(([,c])=>kidNames(c).some(k=>norm(k)===n))||L.find(([,c])=>kidNames(c).some(k=>norm(k).startsWith(n)||n.startsWith(norm(k))));return hit?hit[0]:""}
+function iaReview(gid,all,res){const lab={n:"N",f:"F",x:"X",q:"Q"};const rows=[],auto=[];
+  all.forEach(it=>{const r=res[lab[it.kind]+it.n];
+    if(it.kind==="q"){const L=Array.isArray(r)?r:r&&typeof r==="object"?[r]:[];
+      if(!L.length)rows.push({it,cid:it.kids[0]||"",after:it.text,dest:""});
+      L.forEach(x=>{const cid=iaKid(gid,x.enfant)||(it.kids.length===1?it.kids[0]:"");rows.push({it,cid,after:String(x.texte||it.text).trim(),dest:String(x.dest||"")})});return}
+    if(!r){return}
+    const after=String((typeof r==="string"?r:r.texte)||it.text).trim();const c=S.children.get(it.cid);
+    let dest=it.kind==="n"&&r.dest&&iaDests(c).some(d=>d[0]===r.dest)?r.dest:it.dest0;
+    if(after===it.text.trim()&&dest===it.dest0)auto.push(it);else rows.push({it,cid:it.cid,after,dest})});
+  rows.forEach(r=>{if(r.it.kind==="q"&&r.cid&&!iaDests(S.children.get(r.cid)).some(d=>d[0]===r.dest))r.dest=iaDests(S.children.get(r.cid))[0]?.[0]||""});
+  const nm=cid=>(S.children.get(cid)||{}).name||"";
+  const order=rows.map((r,i)=>i).sort((a,b)=>(nm(rows[a].cid)||"~").localeCompare(nm(rows[b].cid)||"~","fr")||String(rows[a].it.date||"").localeCompare(String(rows[b].it.date||"")));
+  const kids=childrenOf(gid);const where={n:"",f:"Portrait",x:"À explorer",q:"Note rapide"};
+  const destSel=(i,cid,val)=>{const D=iaDests(S.children.get(cid));return D.length?`<select class="field" id="iad${i}" style="margin-top:4px">${D.map(([k,l])=>`<option value="${esc(k)}" ${k===val?"selected":""}>${esc(l)}</option>`).join("")}</select>`:""};
+  if(!rows.length){iaSave(gid,[],auto,null);return}
+  let last=null;
+  openSheet(`<h3>Relire avant d'enregistrer</h3><p class="muted small" style="margin:0">${rows.length} note${rows.length>1?"s":""} à relire${auto.length?` · ${auto.length} déjà correcte${auto.length>1?"s":""} (marquée${auto.length>1?"s":""} comme traitée${auto.length>1?"s":""})`:""}. Décochez ce que vous ne voulez pas appliquer : la note restera telle quelle.</p>
+  <div class="review">${order.map(i=>{const r=rows[i];const it=r.it;const head=nm(r.cid)!==last?`<h4 style="margin:12px 0 2px">${esc(nm(r.cid)||"Enfant à choisir")}</h4>`:"";last=nm(r.cid);
+    return `${head}<div class="ritem"><div class="sel"><input type="checkbox" id="iac${i}" checked> <span class="small muted">${it.date?fmtD(it.date):""} · ${where[it.kind]||""}</span></div>
+    ${it.kind==="q"?`<select class="field" id="iak${i}"><option value="">Choisir l'enfant…</option>${kids.map(([k,c])=>`<option value="${k}" ${k===r.cid?"selected":""}>${esc(c.name)}</option>`).join("")}</select>`:""}
+    ${r.after!==it.text.trim()?`<div class="before">${esc(it.text)}</div>`:""}<textarea class="field" id="iat${i}">${esc(r.after)}</textarea>
+    ${it.kind==="n"||it.kind==="q"?`<span id="iadw${i}">${destSel(i,r.cid,r.dest)}</span>`:""}</div>`}).join("")}</div>
+  <div class="row-actions"><button class="btn primary" id="iaSave">Enregistrer</button><button class="btn" id="iaNo">Annuler</button></div>`,s=>{
+    s.querySelector("#iaNo").onclick=closeSheet;
+    rows.forEach((r,i)=>{const k=s.querySelector("#iak"+i);if(k)k.onchange=()=>{s.querySelector("#iadw"+i).innerHTML=destSel(i,k.value,"")}});
+    s.querySelector("#iaSave").onclick=()=>{const picks=rows.map((r,i)=>({r,on:s.querySelector("#iac"+i).checked,text:s.querySelector("#iat"+i).value.trim(),cid:s.querySelector("#iak"+i)?s.querySelector("#iak"+i).value:r.cid,dest:s.querySelector("#iad"+i)?s.querySelector("#iad"+i).value:r.dest}));
+      const miss=picks.filter(p=>p.on&&p.r.it.kind==="q"&&!p.cid).length;if(miss){toast(`Choisissez l'enfant pour ${miss} note${miss>1?"s":""}, ou décochez-la${miss>1?"s":""}.`);return}
+      iaSave(gid,picks,auto)}})}
+function iaSave(gid,picks,auto){const by=getMe();const X=new Map();const get=cid=>{if(!X.has(cid))X.set(cid,JSON.parse(JSON.stringify(S.children.get(cid))));return X.get(cid)};
+  const find=(x,it)=>(it.kind==="n"?x.notes:it.kind==="x"?x.explore:(x.free||{})[it.k]||[]).find(v=>v.id===it.id);
+  auto.forEach(it=>{const o=find(get(it.cid),it);if(o)o.clean=true});
+  const qDone=new Set();let n=0;
+  picks.forEach(({r,on,text,cid,dest})=>{const it=r.it;
+    if(it.kind==="q"){if(!on||!text)return;qDone.add(it.id);const x=get(cid);const obj=isObjOnly(x);
+      const note={id:uid("n"),date:it.date||todayISO(),text,raw:it.text,clean:true,src:"terrain",by};
+      if(obj){note.obs=1;if(dest.startsWith("cat:"))note.cat=dest.slice(4);else if(dest)note.cobj=dest}
+      else{note.section=(dest||"portrait").split(".")[0];if(dest.includes("."))note.k=dest}
+      (x.notes=x.notes||[]).push(note);n++;return}
+    const x=get(it.cid);const o=find(x,it);if(!o)return;o.clean=true;if(!on||!text)return;
+    if(text!==String(o.text).trim()){if(!o.raw)o.raw=o.text;o.text=text}
+    if(it.kind==="n"&&dest&&dest!==it.dest0){if(isObjOnly(x)){o.obs=1;if(dest.startsWith("cat:")){delete o.cobj;o.cat=dest.slice(4)}else{o.cobj=dest;delete o.cat}}
+      else{o.section=dest.split(".")[0];if(dest.includes("."))o.k=dest;else delete o.k}}
+    n++});
+  X.forEach((x,cid)=>{S.children.set(cid,x);persist("children",cid)});
+  if(qDone.size){const gg=JSON.parse(JSON.stringify(S.groups.get(gid)));gg.inbox=(gg.inbox||[]).filter(q=>!qDone.has(q.id));S.groups.set(gid,gg);persist("groups",gid)}
+  closeSheet();render();toast(n?`${n} note${n>1?"s":""} rangée${n>1?"s":""} et corrigée${n>1?"s":""}`:"Tout était déjà correct")}
+function iaBtn(gid,big){const n=iaPending(gid).length;return `<button class="btn ${big?"primary":"small primary"}" data-act="iaAll" data-id="${gid}" ${n?"":"disabled"}>✨ Tout ranger et corriger${n?` (${n})`:""}</button>`}
 /* ---------- Activités proposées ---------- */
 function actBank(g){const m=new Map();Object.values(g.activites||{}).forEach(L=>(L||[]).forEach(a=>{const k=norm(a.text);const o=m.get(k)||{text:a.text,occ:a.occ,n:0};o.n++;if(!o.occ&&a.occ)o.occ=a.occ;m.set(k,o)}));return [...m.values()].sort((a,b)=>b.n-a.n)}
 function actBlock(gid,d){const g=S.groups.get(gid);const L=(g.activites||{})[d]||[];const fut=d>todayISO();const bank=actBank(g).filter(b=>!L.some(a=>norm(a.text)===norm(b.text))).slice(0,12);
@@ -1580,12 +1669,13 @@ function quickNote(gid,cid){const kids=childrenOf(gid);const sel=new Set(cid?[ci
     s.querySelector("#qnSave").onclick=()=>{const t=s.querySelector("#qnText").value.trim();if(!t){toast("La note est vide.");return}if(recog)try{recog.stop()}catch(e){}
       mutGroup(gid,g=>{(g.inbox=g.inbox||[]).push({id:uid("q"),text:t,date:S.obsDate||todayISO(),at:new Date().toISOString(),kids:[...sel],by:getMe()})});closeSheet();toast("Note gardée dans « À classer »")};
     const mb=s.querySelector('[data-act="dictate"]');if(mb&&SR)setTimeout(()=>dictate("qnText",mb),250)})}
-function inboxHTML(gid){const g=S.groups.get(gid);const L=(g&&g.inbox||[]).slice().sort((a,b)=>(a.at||"").localeCompare(b.at||""));if(!L.length)return "";
+function inboxHTML(gid){const g=S.groups.get(gid);const L=(g&&g.inbox||[]).slice().sort((a,b)=>(a.at||"").localeCompare(b.at||""));
+  if(!L.length)return sample&&iaPending(gid).length?`<section class="card inbox"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="small">Des notes ne sont pas encore rangées ou corrigées.</span>${iaBtn(gid)}</div></section>`:"";
   const nm=k=>{const c=S.children.get(k);return c?c.name:"?"};
   return `<section class="card inbox"><details class="ogdet" data-dk="inbox-${gid}" ${openDetails.has("inbox-"+gid)||L.length<=3?"open":""}><summary><h3 style="font-size:1.25rem;display:inline">À classer</h3> <span class="cnt">${L.length}</span></summary>
   <div class="entries" style="margin-top:8px">${L.map(q=>`<div class="entry col"><div class="erow"><span class="when">${fmtD(q.date)}</span><span class="txt">${q.kids&&q.kids.length?`<b>${q.kids.map(k=>esc(nm(k))).join(", ")}</b> · `:""}${esc(q.text)}</span></div><div class="row-actions" style="margin-top:4px"><button class="btn small primary" data-act="qnSort" data-id="${gid}" data-q="${q.id}">Classer</button><button class="x" aria-label="Supprimer" data-act="qnDel" data-id="${gid}" data-q="${q.id}">✕</button></div></div>`).join("")}</div>
-  <div class="row-actions" style="margin-top:8px">${sample?`<button class="btn small primary" data-act="qnRg" data-id="${gid}">Ranger avec Claude</button>`:""}<button class="btn small" data-act="qnAI" data-id="${gid}">Copier pour mon IA</button><button class="btn small ghost" data-act="qnClear" data-id="${gid}">Tout effacer</button></div>
-  <p class="muted small" style="margin:6px 0 0">« Copier pour mon IA » : votre IA les classe et vous redonne un bloc carnet à importer (Notes › Importer une note). Effacez ensuite la liste.</p></details></section>`}
+  ${sample?`<div class="row-actions" style="margin-top:8px">${iaBtn(gid)}<button class="btn small ghost" data-act="qnClear" data-id="${gid}">Tout effacer</button></div>`:`<div class="row-actions" style="margin-top:8px"><button class="btn small" data-act="qnAI" data-id="${gid}">Copier pour mon IA</button><button class="btn small ghost" data-act="qnClear" data-id="${gid}">Tout effacer</button></div>
+  <p class="muted small" style="margin:6px 0 0">« Copier pour mon IA » : votre IA les classe et vous redonne un bloc carnet à importer (Notes › Importer une note). Effacez ensuite la liste.</p>`}</details></section>`}
 function qnSortSheet(gid,qid){const g=S.groups.get(gid);const q=(g.inbox||[]).find(x=>x.id===qid);if(!q)return;const kids=childrenOf(gid);const sel=new Set(q.kids||[]);
   openSheet(`<h3>Classer la note</h3><textarea class="field" id="qsText" rows="3">${esc(q.text)}</textarea>
   <label class="f">Date<input type="date" class="field" id="qsDate" value="${q.date}"></label>
@@ -2262,18 +2352,21 @@ function eclairGroupSheet(gid){const kids=childrenOf(gid).slice().sort((x,y)=>x[
       const html=`<!DOCTYPE html><html lang="fr-CA"><head><meta charset="utf-8"><title>Fiches éclair · ${esc(g.name)}</title><style>body{font-family:Barlow,Arial,sans-serif;color:#2E3830;margin:18px;font-size:10.5pt}h1{font-size:15pt;margin:0 0 10px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.eclair{border:1px solid #D9D2C3;border-radius:12px;padding:8px 10px;break-inside:avoid}.ehead{display:flex;align-items:center;gap:6px;margin-bottom:4px}.ehead img{width:30px;height:30px}.ehead b{font-size:12pt;flex:1}.el{margin:2px 0;line-height:1.3}.muted{color:#777}.small{font-size:9pt}.opill{font-size:8.5pt}@page{size:Letter;margin:.5in}</style></head><body><h1>Fiches éclair · ${esc(g.name)} · ${esc(fmtD(todayISO(),true))}</h1><div class="grid">${cards}</div></body></html>`;
       const fn=`fiches-eclair-${todayISO()}.html`;if(downloads)await downloads.save({filename:fn,data:new Blob([html],{type:"text/html"})});toast("Version imprimable créée")}})}
 function notesMenu(gid){const g=S.groups.get(gid);const d=S.obsDate;
+  if(sample){const n=iaPending(gid).length;openSheet(`<h3>Notes</h3><p class="small" style="margin:0 0 10px">${n?`<b>${n} note${n>1?"s":""}</b> pas encore rangée${n>1?"s":""} ou corrigée${n>1?"s":""}, toutes dates confondues : notes rapides, notes du terrain, notes des fiches et observations.`:"Toutes les notes sont rangées et corrigées."}</p>
+    <div class="row-actions">${iaBtn(gid,true)}<button class="btn" id="nmC">Fermer</button></div>`,s=>{s.querySelector("#nmC").onclick=closeSheet});return}
   openSheet(`<h3>Notes</h3><label class="f">Date<input type="date" class="field" id="nmD" value="${d}"></label>
   <div class="nmenu">
    <button class="nmi" id="nmExp"><b>Exporter mes notes du jour</b><span></span></button>
    <button class="nmi" id="nmImp"><b>Importer la réponse de l'IA</b><span></span></button>
    <button class="nmi" id="nmIA"><b>Instructions IA</b><span></span></button>
    <button class="nmi" id="nmRg"><b>Ranger les notes du terrain</b><span></span></button>
+   ${sample?`<button class="nmi" id="nmMp"><b>Mettre au propre avec Claude</b><span>Toutes les notes de cette date, réécrites proprement (avant / après)</span></button>`:""}
   </div><button class="btn" id="nmC">Fermer</button>`,s=>{
     s.querySelector("#nmIA").onclick=()=>copyText(instrText(gid),"Instructions copiées : collez-les dans votre IA");
     const dd=()=>s.querySelector("#nmD").value||todayISO();
     s.querySelector("#nmD").onchange=()=>{S.obsDate=dd();notesMenu(gid)};
     s.querySelector("#nmC").onclick=closeSheet;s.querySelector("#nmImp").onclick=()=>pasteSheet(gid,dd(),{replace:true});
-    s.querySelector("#nmExp").onclick=()=>exportDaySheet(gid,dd());s.querySelector("#nmRg").onclick=()=>{S.obsDate=dd();terrainRanger(gid)}})}
+    s.querySelector("#nmExp").onclick=()=>exportDaySheet(gid,dd());s.querySelector("#nmRg").onclick=()=>{S.obsDate=dd();terrainRanger(gid)};const mp=s.querySelector("#nmMp");if(mp)mp.onclick=()=>{S.obsDate=dd();daySheet(gid,dd())}})}
 const HANDLINK={prise:"Crayon",prisecis:"Ciseaux",outils:"Cuillère, pelle",lancer:"Lancer un objet",colle:"Pinceau"};
 const SC_DEF=["dessiner.colle","dessiner.tracer","dessiner.prise","dessiner.ciseaux","bouger.lancer","groupe.transitions","groupe.attente","groupe.appel","groupe.assis"];const SC_OLD=JSON.stringify(["dessiner.prise","dessiner.ciseaux","dessiner.main","groupe.transitions","groupe.attente"]);
 function scChips(gid){const g=S.groups.get(gid);if(!g||tpl(g).objOnly)return "";const T=tpl(g);const scs=getSC().map(k=>{const sc=T.sections.find(x=>x.id===k.split(".")[0]);const r=sc&&rowIn(sc.rows,k.split(".")[1]);const cb=r&&comboOf(r);return r?{k,l:cb&&cb.id!=="prisemain"?cb.label:cb?cb.label:r.label.replace(/\s*\(.*?\)/,""),ic:rowIc(sc.id,cb?cb.rows[0]:r.id)}:null}).filter((x,i,a)=>x&&a.findIndex(y=>y&&y.l===x.l)===i);return `<div class="scchips">${scs.map(x=>`<button class="scchip" data-act="scGo" data-id="${gid}" data-k="${x.k}">${x.ic}<span>${esc(x.l)}</span></button>`).join("")}<button class="linkbtn small" data-act="scEdit" data-id="${gid}">modifier</button></div>`}
@@ -2413,6 +2506,7 @@ document.addEventListener("click",e=>{
   else if(a==="convPistes"){mutChild(id,x=>{const L=(x.objectifs||[]).filter(o=>String(o.label||"").length>90&&!o.titre);x.pistes=(x.pistes||[]).concat(L.map(o=>({id:uid("p"),text:o.label,k:o.k||"",date:o.date,src:"groupe"})));x.objectifs=(x.objectifs||[]).filter(o=>!L.includes(o))});toast("Convertis en pistes")}
   else if(a==="eclairs")eclairGroupSheet(id);
   else if(a==="notesMenu")notesMenu(id);
+  else if(a==="iaAll")iaRun(id);
   else if(a==="scEdit")scSheet(id);
   else if(a==="regG"){S.regG=k;render()}
   else if(a==="qnSort")qnSortSheet(id,b.dataset.q);
@@ -2891,7 +2985,7 @@ function removeExported(gid,date){const g=S.groups.get(gid);const pe=g&&g.pendin
   mutGroup(gid,x=>{x.inbox=(x.inbox||[]).filter(q=>!gk.q.has(q.id));x.objNotes=(x.objNotes||[]).filter(n=>!gk.gn.has(n.id));x.journal=(x.journal||[]).filter(n=>!gk.j.has(n.id));
     x.journal.push({id:uid("j"),date,text:"Notes dictées originales (avant la mise au propre) :\n"+orig,theme:"source",src:"manuel",by:getMe()});delete x.pendingExport});
   return orig}
-function daySheet(gid,date){date=date||S.obsDate;const items=dayItems(gid,date);const ai=AIS[getAI()];
+function daySheet(gid,date){date=date||S.obsDate;const items=dayItems(gid,date).concat(((S.groups.get(gid)||{}).inbox||[]).filter(q=>q.date===date).map(q=>({kind:"q",id:q.id,who:(q.kids||[]).map(k=>(S.children.get(k)||{}).name).filter(Boolean).join(", ")||"Note rapide",where:"À classer",text:q.text})));items.forEach((it,i)=>{if(!it.tag)it.tag="N"+(i+1)});const ai=AIS[getAI()];
   openSheet(`<h3>Bilan du jour</h3>
   <label class="f">Date<input type="date" class="field" id="dnDate" value="${date}"></label>
   <p class="muted small" style="margin:0">${items.length} note${items.length>1?"s":""} prise${items.length>1?"s":""} ce jour-là${items.length?" : "+[...new Set(items.map(i=>i.who))].join(", "):""}.</p>
@@ -2912,9 +3006,9 @@ function daySheet(gid,date){date=date||S.obsDate;const items=dayItems(gid,date);
       <div class="row-actions"><button class="btn primary" id="clSave">Remplacer</button><button class="btn" id="clNo">Annuler</button></div>`,s2=>{
         s2.querySelector("#clNo").onclick=closeSheet;
         s2.querySelector("#clSave").onclick=()=>{const byC=new Map();const jEd=[];let n=0;
-          list.forEach((it,i)=>{if(!s2.querySelector("#cl"+i).checked)return;const t=s2.querySelector("#ct"+i).value.trim();if(!t)return;n++;if(it.kind==="j")jEd.push([it.id,t]);else (byC.get(it.cid)||byC.set(it.cid,[]).get(it.cid)).push([it,t])});
+          list.forEach((it,i)=>{if(!s2.querySelector("#cl"+i).checked)return;const t=s2.querySelector("#ct"+i).value.trim();if(!t)return;n++;if(it.kind==="j"||it.kind==="q")jEd.push([it.id,t,it.kind]);else (byC.get(it.cid)||byC.set(it.cid,[]).get(it.cid)).push([it,t])});
           byC.forEach((eds,cid)=>{const x=JSON.parse(JSON.stringify(S.children.get(cid)));eds.forEach(([it,t])=>{let arr=it.kind==="n"?x.notes:it.kind==="x"?x.explore:(x.free||{})[it.k];const o=(arr||[]).find(v=>v.id===it.id);if(o){if(!o.raw)o.raw=o.text;o.text=t;o.clean=true}});S.children.set(cid,x);persist("children",cid)});
-          if(jEd.length){const gg=JSON.parse(JSON.stringify(S.groups.get(gid)));jEd.forEach(([id,t])=>{const o=(gg.journal||[]).find(v=>v.id===id);if(o){if(!o.raw)o.raw=o.text;o.text=t;o.clean=true}});S.groups.set(gid,gg);persist("groups",gid)}
+          if(jEd.length){const gg=JSON.parse(JSON.stringify(S.groups.get(gid)));jEd.forEach(([id,t,k])=>{const o=((k==="q"?gg.inbox:gg.journal)||[]).find(v=>v.id===id);if(o){if(!o.raw)o.raw=o.text;o.text=t;o.clean=true}});S.groups.set(gid,gg);persist("groups",gid)}
           closeSheet();render();toast(n+" note"+(n>1?"s":"")+" mise"+(n>1?"s":"")+" au propre")}})};
     const parseMap=raw=>{const a=raw.indexOf("{"),b=raw.lastIndexOf("}");try{return JSON.parse(raw.slice(a,b+1))}catch(e){return null}};
     const cl=s.querySelector("#dnClean");if(cl)cl.onclick=async()=>{cl.disabled=true;cl.innerHTML='<span class="spinner"></span> Réécriture…';try{const res=await sample.json(cleanPrompt(items),{modelTier:"default"});showCleanReview(res||{})}catch(e){cl.disabled=false;cl.textContent="Mettre au propre avec Claude";toast(e&&e.code==="rate_limited"?"Trop de demandes. Réessayez dans une minute.":"La réécriture n'a pas fonctionné.")}};
