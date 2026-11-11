@@ -1,12 +1,12 @@
 {
-  "name": "Carnet nature (test synchro)",
-  "short_name": "Carnet TEST",
+  "name": "Carnet d'observation nature",
+  "short_name": "Carnet nature",
   "lang": "fr-CA",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "background_color": "#F7F3EA",
-  "theme_color": "#8A5A2B",
+  "theme_color": "#3D6A4A",
   "icons": [
     {
       "src": "img/icon-192.png",

@@ -41,9 +41,12 @@ function supaBackend(){
     async pull(space,since){const out=[];for(let i=0;;i+=500){const d=ok(await sb.from("docs").select("id,data,iv,deleted,updated_at").eq("space_id",space).gt("updated_at",since).not("id","like","photos/%").order("updated_at").range(i,i+499));out.push(...d);if(d.length<500)break}return out},
     async upsert(space,rows){ok(await sb.from("docs").upsert(rows.map(r=>({space_id:space,id:r.id,data:r.data,iv:r.iv,deleted:!!r.deleted})),{onConflict:"space_id,id"}))},
     async getOne(space,id){return ok(await sb.from("docs").select("id,data,iv,deleted,updated_at").eq("space_id",space).eq("id",id).maybeSingle())},
-    async ai(prompt,json){const {data}=await sb.auth.getSession();const tok=data&&data.session&&data.session.access_token;if(!tok)throw new Error("Connexion requise");
-      const r=await fetch(CFG.url+"/functions/v1/ia",{method:"POST",headers:{"Authorization":"Bearer "+tok,"apikey":CFG.key,"Content-Type":"application/json"},body:JSON.stringify({prompt,json:!!json})});
+    async ai(prompt,json,max){const {data}=await sb.auth.getSession();const tok=data&&data.session&&data.session.access_token;if(!tok)throw new Error("Connexion requise");
+      const r=await fetch(CFG.url+"/functions/v1/ia",{method:"POST",headers:{"Authorization":"Bearer "+tok,"apikey":CFG.key,"Content-Type":"application/json"},body:JSON.stringify({prompt,json:!!json,max:max||undefined})});
       const j=await r.json().catch(()=>({}));if(!r.ok){const e=new Error(j.error||("Erreur "+r.status));if(r.status===429)e.code="rate_limited";if(r.status===404)e.message="La fonction « ia » n'est pas encore installée dans Supabase.";throw e}return j.text||""},
+    async consCreate(space,token,meta,iv){ok(await sb.from("consent_requests").insert({token,space_id:space,meta,meta_iv:iv}))},
+    async consList(space){return ok(await sb.from("consent_requests").select("token,payload,payload_iv,used_at").eq("space_id",space).not("used_at","is",null))},
+    async consDelete(token){ok(await sb.from("consent_requests").delete().eq("token",token))},
     subscribe(space,cb){const ch=sb.channel("docs-"+space).on("postgres_changes",{event:"*",schema:"public",table:"docs",filter:"space_id=eq."+space},()=>cb()).subscribe();return()=>sb.removeChannel(ch)}
   }}
 
@@ -52,29 +55,36 @@ const ACC={a:"[aàâä]",e:"[eéèêë]",i:"[iîï]",o:"[oôö]",u:"[uùûü]",c
 const strip=t=>t.normalize("NFD").replace(/[\u0300-\u036f]/g,"");
 const tok=(p,i)=>p+"_"+(i<26?String.fromCharCode(65+i):String.fromCharCode(65+Math.floor(i/26)-1)+String.fromCharCode(65+i%26));
 const IA_DEF=`Agis en tant qu'assistant de rédaction clinique pour une ergothérapeute et une éducatrice spécialisée (enfants de 0 à 12 ans en classe nature). Réécris les notes d'observation brutes au propre en respectant ces règles :
-1. Ton clinique juste et équilibré (ni lunettes roses, ni lunettes noires) : rédige à la troisième personne (aucun « je » ni « nous »). Le texte doit être 100 % factuel et descriptif.
+1. Reformule chaque fois que c'est possible, au lieu de seulement corriger : langage clinique, juste et descriptif. Décris ce qui est observable, avec le vocabulaire professionnel approprié (ergothérapie, éducation spécialisée), plutôt qu'un jugement de valeur (« bonne », « pas bonne », « bien », « mal »). Ex. : « n'a pas une bonne prise de crayon » devient une description de la prise observée (type de prise, position des doigts et du pouce, mouvement).
+2. Ton clinique juste et équilibré (ni lunettes roses, ni lunettes noires) : rédige à la troisième personne (aucun « je » ni « nous » ; écris « l'adulte » ou « l'intervenante »). Le texte doit être 100 % factuel et descriptif.
 - Pas de lunettes noires : ne dramatise pas et ne sois pas centré uniquement sur les déficits. Décris les comportements difficiles de façon neutre (comme des obstacles à l'occupation), et nomme toujours les forces, les initiatives et les tentatives de l'enfant.
 - Pas de lunettes roses : ne minimise pas les difficultés, n'édulcore pas la réalité avec des tournures embellies et n'invente pas d'intentions positives non observées.
-2. Structure par habiletés : chaque note commence par le domaine clinique observé (ex. : « Motricité fine : », « Régulation émotionnelle : »).
-3. Intégrité des faits : conserve tous les détails, les déclencheurs exacts, les durées et les mots prononcés par l'enfant (entre guillemets). Ne résume pas au point de perdre de l'information.
-4. Orientation solutions (facilitateurs) : identifie clairement ce qui soutient l'enfant. Utilise au besoin « Stratégie de succès : » ou « À explorer : » pour mettre en valeur les adaptations de l'environnement ou les interventions de l'adulte qui ont fonctionné.`;
-const IA={rules(){const d=LOCAL.cache.get("config/ia");return d&&typeof d.regles==="string"?d.regles:IA_DEF},
-  setRules(v){db.doc("config/ia").set({regles:v})},
+3. Pas de titre ni de domaine au début de la note : la note est déjà rangée au bon endroit dans le carnet.
+4. Intégrité des faits : conserve tous les détails, les déclencheurs exacts, les durées et les mots prononcés par l'enfant (entre guillemets). Ne résume pas au point de perdre de l'information.
+5. Orientation solutions (facilitateurs) : identifie clairement ce qui soutient l'enfant. Utilise au besoin « Stratégie de succès : » ou « À explorer : » pour mettre en valeur les adaptations de l'environnement ou les interventions de l'adulte qui ont fonctionné.`;
+const IA_OLD="Agis en tant qu'assistant de rédaction clinique pour une ergothérapeute et une éducatrice spécialisée (enfants de 0 à 12 ans en classe nature). Réécris les notes d'observation brutes au propre en respectant ces règles :\n1. Ton clinique juste et équilibré (ni lunettes roses, ni lunettes noires) : rédige à la troisième personne (aucun « je » ni « nous »). Le texte doit être 100 % factuel et descriptif.\n- Pas de lunettes noires : ne dramatise pas et ne sois pas centré uniquement sur les déficits. Décris les comportements difficiles de façon neutre (comme des obstacles à l'occupation), et nomme toujours les forces, les initiatives et les tentatives de l'enfant.\n- Pas de lunettes roses : ne minimise pas les difficultés, n'édulcore pas la réalité avec des tournures embellies et n'invente pas d'intentions positives non observées.\n2. Structure par habiletés : chaque note commence par le domaine clinique observé (ex. : « Motricité fine : », « Régulation émotionnelle : »).\n3. Intégrité des faits : conserve tous les détails, les déclencheurs exacts, les durées et les mots prononcés par l'enfant (entre guillemets). Ne résume pas au point de perdre de l'information.\n4. Orientation solutions (facilitateurs) : identifie clairement ce qui soutient l'enfant. Utilise au besoin « Stratégie de succès : » ou « À explorer : » pour mettre en valeur les adaptations de l'environnement ou les interventions de l'adulte qui ont fonctionné.";
+const IA={rules(){const d=LOCAL.cache.get("config/ia");return d&&typeof d.regles==="string"&&d.regles!==IA_OLD?d.regles:IA_DEF},
+  setRules(v){const d=Object.assign({},LOCAL.cache.get("config/ia")||{});d.regles=v;db.doc("config/ia").set(d)},
+  noms(){const d=LOCAL.cache.get("config/ia");return String(d&&d.noms||"").split(/[,;\n]+/).map(x=>x.trim()).filter(x=>x.length>1)},
+  setNoms(v){const d=Object.assign({},LOCAL.cache.get("config/ia")||{});d.noms=v;if(typeof d.regles!=="string")d.regles=IA.rules();db.doc("config/ia").set(d)},
   on(){try{return localStorage.getItem("carnet-ia")==="1"}catch(e){return false}},
   set(v){try{localStorage.setItem("carnet-ia",v?"1":"0")}catch(e){}IA.apply()},
   apply(){sample=SYNC.on&&IA.on()?IA.sampler():null},
   table(){const pairs=[],back={};let k=0,a=0;
-    S.children.forEach(c=>{if(!c||!c.name)return;const t=tok("Enfant",k++);back[t]=c.name;(typeof kidNames==="function"?kidNames(c):[c.name]).forEach(n=>pairs.push([n,t]))});
-    const ad=new Set();try{if(getMe())ad.add(getMe())}catch(e){}try{(getSign()||[]).forEach(x=>x&&x.nom&&ad.add(x.nom))}catch(e){}(SYNC._mem||[]).forEach(m=>m.display_name&&ad.add(m.display_name));
-    ad.forEach(full=>{const t=tok("Adulte",a++);back[t]=full.split(/\s+/)[0];full.split(/\s+/).filter(w=>w.length>1).forEach(w=>pairs.push([w,t]));pairs.push([full,t])});
+    S.children.forEach(c=>{if(!c||!c.name)return;const t=tok("Enfant",k++);back[t]=c.name;(typeof kidNames==="function"?kidNames(c):[c.name]).forEach(n=>pairs.push([n,t]));if(c.nom){pairs.push([c.name+" "+c.nom,t]);String(c.nom).split(/[\s-]+/).filter(w=>w.length>2).forEach(w=>pairs.push([w,t]));pairs.push([c.nom,t])}});
+    const ad=new Set();try{if(getMe())ad.add(getMe())}catch(e){}try{(getSign()||[]).forEach(x=>x&&x.nom&&ad.add(x.nom))}catch(e){}(SYNC._mem||[]).forEach(m=>m.display_name&&ad.add(m.display_name));IA.noms().forEach(n=>ad.add(n));
+    const STOP=new Set(["le","la","les","de","du","des","l","d","école","ecole","cpe","centre","et"]);
+    ad.forEach(full=>{const t=tok("Adulte",a++);const W=full.split(/\s+/);back[t]=W.length>1&&W.every(w=>/^\p{Lu}/u.test(w))?W[0]:full;W.filter(w=>w.length>2&&/^\p{Lu}/u.test(w)&&!STOP.has(w.toLowerCase())).forEach(w=>pairs.push([w,t]));pairs.push([full,t])});
     pairs.sort((x,y)=>y[0].length-x[0].length);
     return{rx:pairs.filter(p=>p[0].trim().length>1).map(([n,t])=>[new RegExp("(?<![\\p{L}\\p{N}_])"+[...strip(n.trim())].map(ch=>{const l=ch.toLowerCase();return ACC[l]||ch.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")}).join("")+"(?![\\p{L}\\p{N}_])","giu"),t]),back}},
   mask(text){const T=IA.table();let s=String(text).normalize("NFC");T.rx.forEach(([r,t])=>{s=s.replace(r,t)});return{text:s,back:T.back}},
   unmask(s,back){return String(s).replace(/(Enfant|Adulte)_([A-Z]{1,2})(?![A-Za-z])/g,m=>back[m]||m)},
-  async ask(prompt,json){const r=IA.rules().trim();if(r)prompt="CONSIGNES DE RÉDACTION DE L'ERGOTHÉRAPEUTE (à suivre pour tout texte que tu écris ; dans le carnet, chaque note reste une entrée séparée et tu respectes le format de réponse demandé plus bas) :\n"+r+"\n\n---\n\n"+prompt;const m=IA.mask(prompt);SYNC.lastSent=m.text;const t=await SYNC.be.ai(m.text,json);SYNC.lastGot=t;return IA.unmask(t,m.back)},
+  async ask(prompt,json,max){const r=IA.rules().trim();if(r)prompt="CONSIGNES DE RÉDACTION DE L'ERGOTHÉRAPEUTE (à suivre pour tout texte que tu écris ; dans le carnet, chaque note reste une entrée séparée et tu respectes le format de réponse demandé plus bas) :\n"+r+"\n\n---\n\n"+prompt;const m=IA.mask(prompt);SYNC.lastSent=m.text;SYNC.lastErr="";let t;try{t=await SYNC.be.ai(m.text,json,max)}catch(e){SYNC.lastErr=String(e&&e.message||e);throw e}SYNC.lastGot=t;return IA.unmask(t,m.back)},
   parse(t){t=String(t).replace(/```(?:json)?/g,"");const i=t.search(/[\[{]/);const j=Math.max(t.lastIndexOf("}"),t.lastIndexOf("]"));if(i<0||j<i)throw {code:"format"};try{return JSON.parse(t.slice(i,j+1))}catch(e){throw {code:"format"}}},
   sampler(){const f=async(prompt,opts)=>{const t=await IA.ask(prompt,false);try{opts&&opts.onText&&opts.onText({text:t})}catch(e){}return{text:t}};
-    f.json=async prompt=>IA.parse(await IA.ask(prompt,true));return f}};
+    f.json=async(prompt,opts)=>{const mx=opts&&opts.max;let t=await IA.ask(prompt,true,mx);try{return IA.parse(t)}catch(e){}
+      t=await IA.ask(prompt+"\n\nIMPORTANT : ta réponse doit être du JSON strictement valide et complet (échappe les guillemets droits à l'intérieur des textes, aucun texte autour).",true,mx);
+      try{return IA.parse(t)}catch(e){SYNC.lastErr="Réponse de l'IA illisible (JSON incomplet ou mal formé).";throw Object.assign(new Error(SYNC.lastErr),{code:"format"})}};return f}};
 window.SYNC_IA=IA;
 
 /* ---------- Moteur ---------- */
@@ -95,7 +105,7 @@ const SYNC=window.SYNC={on:false,status:"off",msg:"",user:null,space:null,key:nu
   schedule(ms){if(!SYNC.on)return;clearTimeout(SYNC._t);SYNC._t=setTimeout(()=>SYNC.run(),ms||0)},
 
   async run(){if(!SYNC.on||SYNC.busy)return;if(!navigator.onLine){SYNC.setStatus("offline");return}
-    SYNC.busy=true;try{await SYNC.pull();await SYNC.push();SYNC.lastAt=new Date();SYNC.setStatus(SYNC.dirty().length?"pending":"ok")}
+    SYNC.busy=true;try{await SYNC.pull();await SYNC.push();try{await CONS.poll()}catch(e){console.warn("consentements",e)}SYNC.lastAt=new Date();SYNC.setStatus(SYNC.dirty().length?"pending":"ok")}
     catch(e){console.warn("sync",e);SYNC.setStatus(navigator.onLine?"error":"offline",e&&e.message)}
     finally{SYNC.busy=false;if(SYNC._again){SYNC._again=false;SYNC.schedule(300)}}},
 
@@ -224,6 +234,7 @@ const SYNC=window.SYNC={on:false,status:"off",msg:"",user:null,space:null,key:nu
       <div id="syInvBox"></div>
       <div class="notice" style="margin-top:12px"><label class="chk"><input type="checkbox" id="syIA" ${IA.on()?"checked":""}> <span><b>IA dans le carnet</b> (Ranger les notes du terrain, Mettre au propre…)</span></label>
         <span class="small">Avant l'envoi, les prénoms des enfants et des adultes sont remplacés par des codes (Enfant_A…), puis remis dans la réponse sur cet appareil. Ni date de naissance ni photo ne sont envoyées.</span>
+        <details style="margin-top:6px"><summary class="small"><b>Autres noms à cacher</b> (adultes, intervenantes, école)</summary><p class="small muted" style="margin:4px 0">Les prénoms des enfants et le vôtre sont déjà cachés. Ajoutez ici les noms qui reviennent dans vos notes, séparés par des virgules.</p><textarea class="field" id="syNoms" style="min-height:70px" placeholder="Ex. : Gabrielle, Francis, Karine Dagenais, Le Préambule">${esc(IA.noms().join(", "))}</textarea><div class="row-actions"><button class="btn small primary" id="syNomsOk">Enregistrer</button></div></details>
         <details style="margin-top:6px"><summary class="small"><b>Mes consignes de rédaction</b></summary><textarea class="field" id="syRules" style="min-height:220px;font-size:.85rem">${esc(IA.rules())}</textarea>
           <div class="row-actions"><button class="btn small primary" id="syRulesOk">Enregistrer les consignes</button><button class="btn ghost small" id="syRulesDef">Remettre celles par défaut</button></div></details>
         ${SYNC.lastSent?`<div class="row-actions" style="margin-top:6px"><button class="btn ghost small" id="sySent">Voir le dernier envoi</button></div>`:""}</div>
@@ -233,10 +244,11 @@ const SYNC=window.SYNC={on:false,status:"off",msg:"",user:null,space:null,key:nu
         q("#syInv").onclick=()=>SYNC.act(async()=>{const A="ABCDEFGHJKMNPQRSTUVWXYZ23456789";const r=crypto.getRandomValues(new Uint8Array(8));const code=[...r].map(x=>A[x%A.length]).join("");
           await SYNC.be.createInvite(SYNC.space.id,code);
           q("#syInvBox").innerHTML=`<div class="notice" style="margin-top:10px">Code : <b style="font-size:1.3rem;letter-spacing:2px">${code.slice(0,4)}-${code.slice(4)}</b><br><span class="small">Valide 7 jours. Votre collègue installe le carnet test, crée son compte, choisit « Rejoindre avec un code » et entre ce code avec le <b>mot de passe du groupe</b> (dites-le-lui de vive voix, pas dans le même message).</span></div>`});
+        q("#syNomsOk").onclick=()=>{IA.setNoms(q("#syNoms").value);toast("Noms enregistrés : ils seront cachés à l'envoi")};
         q("#syRulesOk").onclick=()=>{IA.setRules(q("#syRules").value);toast("Consignes enregistrées")};
         q("#syRulesDef").onclick=()=>{q("#syRules").value=IA_DEF;IA.setRules(IA_DEF);toast("Consignes par défaut remises")};
         q("#syIA").onchange=e=>{IA.set(e.target.checked);toast(e.target.checked?"IA activée":"IA désactivée")};
-        q("#sySent")&&(q("#sySent").onclick=()=>openSheet(`<h3>Dernier envoi à l'IA</h3><p class="muted small" style="margin:0">Exactement ce qui a quitté l'appareil :</p><pre style="white-space:pre-wrap;font-size:.8rem;max-height:55vh;overflow:auto;background:#fff;padding:8px;border-radius:8px">${esc(SYNC.lastSent)}</pre><div class="row-actions"><button class="btn" id="syBack">Retour</button></div>`,s2=>s2.querySelector("#syBack").onclick=()=>SYNC.open()));
+        q("#sySent")&&(q("#sySent").onclick=()=>openSheet(`<h3>Dernier envoi à l'IA</h3>${SYNC.lastErr?`<div class="notice err small"><b>Erreur :</b> ${esc(SYNC.lastErr)}</div>`:""}<p class="muted small" style="margin:0">Exactement ce qui a quitté l'appareil :</p><pre style="white-space:pre-wrap;font-size:.8rem;max-height:40vh;overflow:auto;background:#fff;padding:8px;border-radius:8px">${esc(SYNC.lastSent)}</pre>${SYNC.lastGot?`<p class="muted small" style="margin:6px 0 0">Réponse reçue (avec les codes) :</p><pre style="white-space:pre-wrap;font-size:.8rem;max-height:30vh;overflow:auto;background:#fff;padding:8px;border-radius:8px">${esc(SYNC.lastGot)}</pre>`:""}<div class="row-actions"><button class="btn" id="syBack">Retour</button></div>`,s2=>s2.querySelector("#syBack").onclick=()=>SYNC.open()));
         q("#syLock").onclick=()=>SYNC.act(async()=>{SYNC.stop();await SYNC.keyPut(null);SYNC.key=null;SYNC.setStatus("locked");closeSheet();render()});
         q("#syOut").onclick=()=>SYNC.signOut()})})},
 
@@ -245,6 +257,147 @@ const SYNC=window.SYNC={on:false,status:"off",msg:"",user:null,space:null,key:nu
   async act(fn){try{await fn()}catch(e){console.warn(e);const m=String(e&&e.message||e);
     toast(/Invalid login/i.test(m)?"Courriel ou mot de passe incorrect.":/already registered/i.test(m)?"Ce courriel a déjà un compte : connectez-vous.":/Email not confirmed/i.test(m)?"Courriel pas encore confirmé : ouvrez le lien reçu.":/fetch|network/i.test(m)?"Pas de connexion au serveur.":m.length<140?m:"Erreur : "+m.slice(0,120))}}
 };
+
+/* ---------- Consentements envoyés aux parents ---------- */
+const b64u={to:b=>btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""),from:s=>Uint8Array.from(atob(s.replace(/-/g,"+").replace(/_/g,"/")+"===".slice((s.length+3)%4)),c=>c.charCodeAt(0))};
+const CONS=window.CONS={DESC_DEF:"Le projet a pour but de stimuler les habiletés de motricité, d'autonomie, de régulation émotionnelle, de langage et d'habiletés sociales. Il est animé par Mélanie Champagne, éducatrice spécialisée, et Valérie Ferron, ergothérapeute. Les rencontres ont lieu en forêt et le transport est assuré par le CAAL.",
+  desc(g){return (g&&g.consDesc)||CONS.DESC_DEF},
+  SECS:[["projet","Le projet"],["services","Les services"],["partage","Partage de renseignements"],["photos","Photos et vidéos"],["carnet","Les notes et le carnet"],["risque","Prise de risque saine"]],
+  cfgDef(){const P=(org,L)=>L.map(([n,r],i)=>({id:(org==="CAAL"?"pa":"pc")+i,nom:n,role:r||"",org}));
+    return {annuaire:P("CO Clinique",[["Émilie Jacob","psychoéducatrice"],["Mélanie Champagne","éducatrice spécialisée"],["Valérie Ferron","ergothérapeute"],["Alexandra Tremblay","orthophoniste"],["Francis Tremblay","orthophoniste"],["Gabrielle Paquin","éducatrice spécialisée"]]).concat(P("CAAL",[["Marie Thielen"],["Molly Moar"],["Lydia Drouin-Tanguay"],["Caerline Brumie Soifaite"],["Stéphanie Bonsaint"],["Manon Doré"],["Emylou Lapalme"],["Anouk Comtois"],["Elena Trembay"],["Shanyng Versailles"],["Johanne Flamand"],["Luk Parlavecchio"]])),
+      items:[{k:"services",s:"projet",t:"Je consens à ce que mon enfant participe au projet (description ci-dessus)."},
+        {k:"remplacant",s:"services",t:"En cas d'absence d'une intervenante, je consens à ce qu'un autre professionnel la remplace lors des sorties auprès de mon enfant."},
+        {k:"depistage",s:"services",t:"Je consens à ce que les professionnelles nommées réalisent et recueillent des observations cliniques auprès de mon enfant à des fins de dépistage. Le dépistage permet de voir si un enfant est à risque de présenter des difficultés sensorielles, motrices ou de régulation émotionnelle, et s'il pourrait bénéficier d'une évaluation en ergothérapie ou d'autres recommandations."},
+        {k:"comm_co",s:"partage",t:"Je consens au partage d'informations verbales et de documents écrits jugés pertinents (ex. : rapport d'évaluation) entre les professionnelles qui travaillent auprès de mon enfant chez CO Clinique, pour une période de 365 jours :",people:true,defOrg:"CO Clinique"},
+        {k:"comm_caal",s:"partage",t:"Je consens au partage d'informations verbales et de documents écrits jugés pertinents entre les intervenantes qui travaillent auprès de mon enfant au CAAL, pour une période de 365 jours :",people:true,defOrg:"CAAL"},
+        {k:"photos",s:"photos",t:"Je consens à ce que Mélanie Champagne, éducatrice spécialisée, et Valérie Ferron, ergothérapeute, prennent des photos de mon enfant lors des sorties. Les photos pourront être utilisées à des fins pédagogiques."},
+        {k:"photos_parents",s:"photos",t:"J'autorise la diffusion aux autres parents des photos où se trouve mon enfant."},
+        {k:"photos_media",s:"photos",t:"J'autorise le CAAL à diffuser les photos de mon enfant sur ses médias sociaux."},
+        {k:"stockage",s:"carnet",t:"Je consens à ce que les observations soient conservées dans un carnet numérique chiffré, hébergé sur un serveur au Canada, accessible seulement aux professionnelles qui accompagnent mon enfant."},
+        {k:"ia",s:"carnet",t:"J'accepte que des outils d'intelligence artificielle aident les professionnelles à mettre leurs notes au propre, sans jamais recevoir le nom de mon enfant."},
+        {k:"risque",s:"risque",t:"J'ai lu le texte sur la prise de risque saine et je consens à ce que mon enfant participe aux activités nature avec une prise de risque saine, sous la supervision des professionnelles présentes."}]}},
+  cfg(){const d=LOCAL.cache.get("config/cons");return d&&Array.isArray(d.items)?d:CONS.cfgDef()},
+  pick(g,it){const C=CONS.cfg();const sel=g&&g.consPeople&&g.consPeople[it.k];return sel?C.annuaire.filter(p=>sel.includes(p.id)):(it.defOrg?C.annuaire.filter(p=>p.org===it.defOrg):[])},
+  pname(p){return p.nom+(p.role?" ("+p.role+")":"")},
+  metaItems(g){return CONS.cfg().items.filter(it=>it.on!==false&&String(it.t||"").trim()).map(it=>Object.assign({k:it.k,s:it.s,t:it.t},it.people?{l:CONS.pick(g,it).map(CONS.pname),y365:1}:{}))},
+  settingsHTML(){const C=CONS.cfg();const op=typeof openDetails!=="undefined"&&openDetails.has("set-cons");
+    const prow=p=>`<div class="row csp" data-id="${esc(p.id||"")}" style="gap:6px;margin:4px 0;align-items:center"><input class="field" placeholder="Nom" value="${esc(p.nom||"")}"><input class="field" placeholder="Rôle" value="${esc(p.role||"")}"><input class="field" placeholder="Organisme" value="${esc(p.org||"")}"><button type="button" class="btn ghost small" data-cset="pdel" aria-label="Retirer">✕</button></div>`;
+    const irow=it=>`<div class="csi" data-k="${esc(it.k||"")}" data-c="${it.custom?1:""}" style="border-top:1px dashed var(--line);padding:8px 0"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select class="field" style="width:auto;padding:4px 8px">${CONS.SECS.map(([k,l])=>`<option value="${k}" ${it.s===k?"selected":""}>${l}</option>`).join("")}</select><label class="chk small"><input type="checkbox" class="cso" ${it.on===false?"":"checked"}> Active</label><label class="chk small"><input type="checkbox" class="csp2" ${it.people?"checked":""}> Liste de personnes (partage, 365 jours)</label>${it.custom?`<button type="button" class="btn ghost small" data-cset="idel">Retirer</button>`:""}</div><textarea class="field" style="min-height:60px;font-size:.9rem">${esc(it.t||"")}</textarea></div>`;
+    return `<section class="card"><details class="ogdet" data-dk="set-cons" ${op?"open":""}><summary><h3 style="font-size:1.25rem;display:inline">Consentements</h3> <span class="muted small">formulaire envoyé aux parents</span></summary>
+      <p class="muted small" style="margin:6px 0">Ces textes et ces personnes servent pour les prochains formulaires. Les consentements déjà signés gardent le texte exact du moment de la signature. Dans chaque groupe (Modifier le groupe), vous choisissez quelles personnes cocher pour chaque partage.</p>
+      <h4 style="margin:10px 0 4px">Annuaire</h4><div id="cspL">${C.annuaire.map(prow).join("")}</div><button type="button" class="btn ghost small" data-cset="padd">+ Une personne</button>
+      <h4 style="margin:14px 0 4px">Autorisations</h4><div id="csiL">${C.items.map(irow).join("")}</div><button type="button" class="btn ghost small" data-cset="iadd">+ Une autorisation</button>
+      <div class="row-actions" style="margin-top:12px"><button type="button" class="btn primary" data-cset="save">Enregistrer</button><button type="button" class="btn ghost small" data-cset="reset">Remettre le formulaire d'origine</button></div></details></section>`},
+  settingsAct(a,b){const sec=b.closest("section");if(a==="pdel"){b.closest(".csp").remove();return}if(a==="idel"){b.closest(".csi").remove();return}
+    if(a==="padd"){sec.querySelector("#cspL").insertAdjacentHTML("beforeend",`<div class="row csp" data-id="" style="gap:6px;margin:4px 0;align-items:center"><input class="field" placeholder="Nom"><input class="field" placeholder="Rôle"><input class="field" placeholder="Organisme"><button type="button" class="btn ghost small" data-cset="pdel">✕</button></div>`);return}
+    if(a==="iadd"){sec.querySelector("#csiL").insertAdjacentHTML("beforeend",`<div class="csi" data-k="" data-c="1" style="border-top:1px dashed var(--line);padding:8px 0"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select class="field" style="width:auto;padding:4px 8px">${CONS.SECS.map(([k,l])=>`<option value="${k}" ${k==="partage"?"selected":""}>${l}</option>`).join("")}</select><label class="chk small"><input type="checkbox" class="cso" checked> Active</label><label class="chk small"><input type="checkbox" class="csp2"> Liste de personnes (partage, 365 jours)</label><button type="button" class="btn ghost small" data-cset="idel">Retirer</button></div><textarea class="field" style="min-height:60px;font-size:.9rem" placeholder="Ex. : Je consens au partage d'informations avec l'école Le Préambule, pour une période de 365 jours :"></textarea></div>`);return}
+    if(a==="reset"){confirmSheet("Remettre les textes et l'annuaire du formulaire d'origine ?",()=>{db.doc("config/cons").set(CONS.cfgDef());render();toast("Formulaire d'origine remis")});return}
+    if(a==="save"){const old=CONS.cfg();const rid=p=>p+Math.random().toString(36).slice(2,8);
+      const annuaire=[...sec.querySelectorAll(".csp")].map(r=>{const i=r.querySelectorAll("input");return {id:r.dataset.id||rid("p"),nom:i[0].value.trim(),role:i[1].value.trim(),org:i[2].value.trim()}}).filter(p=>p.nom);
+      const items=[...sec.querySelectorAll(".csi")].map(r=>{const k=r.dataset.k||rid("x");const o=old.items.find(x=>x.k===k)||{};const t=r.querySelector("textarea").value.trim();
+        return Object.assign({},o,{k,s:r.querySelector("select").value,t,on:r.querySelector(".cso").checked,people:r.querySelector(".csp2").checked,custom:o.custom||!!r.dataset.c||!old.items.some(x=>x.k===k)})}).filter(it=>it.t);
+      db.doc("config/cons").set({annuaire,items});render();toast("Consentements enregistrés")}},
+  groupFormHTML(g){const C=CONS.cfg();const PI=C.items.filter(it=>it.people&&it.on!==false);const orgs=[...new Set(C.annuaire.map(p=>p.org||""))];
+    return `<details class="ogdet" style="margin-top:10px"><summary><b>Consentement aux parents</b></summary>
+      <label class="f">Description du projet<textarea class="field" id="gCons" style="min-height:110px">${esc(g.consDesc||CONS.DESC_DEF)}</textarea></label>
+      ${PI.map(it=>{const sel=new Set(CONS.pick(g,it).map(p=>p.id));return `<div style="margin-top:10px"><p class="small" style="margin:0 0 4px"><b>${esc(it.t.length>90?it.t.slice(0,88)+"…":it.t)}</b></p>${orgs.map(o=>{const L=C.annuaire.filter(p=>(p.org||"")===o);return L.length?`<div class="small muted" style="margin:4px 0 2px">${esc(o||"Sans organisme")}</div><div class="chips">${L.map(p=>`<label class="chip mini"><input type="checkbox" data-gcp="${esc(it.k)}" value="${esc(p.id)}" ${sel.has(p.id)?"checked":""}> ${esc(CONS.pname(p))}</label>`).join("")}</div>`:""}).join("")}</div>`}).join("")}
+      <p class="muted small" style="margin:8px 0 0">Annuaire et textes : Paramètres › Consentements.</p></details>`},
+  groupFormRead(s,obj){const gc=s.querySelector("#gCons");if(!gc)return;const v=gc.value.trim();if(v&&v!==CONS.DESC_DEF)obj.consDesc=v;else delete obj.consDesc;
+    const cp={};CONS.cfg().items.filter(it=>it.people&&it.on!==false).forEach(it=>{cp[it.k]=[...s.querySelectorAll(`[data-gcp="${CSS.escape(it.k)}"]:checked`)].map(i=>i.value)});obj.consPeople=cp},
+  list(c){return (c&&c.consents||[]).slice().sort((a,b)=>String(b.sentAt).localeCompare(String(a.sentAt)))},
+  url(t,k){return location.origin+location.pathname.replace(/[^/]*$/,"")+"consentement.html#t="+t+"&k="+k},
+  fd(iso){return iso?new Date(iso).toLocaleDateString("fr-CA",{day:"numeric",month:"long",year:"numeric"}):""},
+  echeance(r){if(!r||!r.signedAt)return null;const d=new Date(r.signedAt);d.setDate(d.getDate()+365);return d},
+  card(cid){const c=S.children.get(cid);if(!c)return "";const L=CONS.list(c);const sg=L.find(r=>r.status==="signe");const pd=L.find(r=>r.status==="envoye"&&new Date(r.sentAt).getTime()+30*864e5>Date.now());
+    const ech=CONS.echeance(sg);const soon=ech&&ech.getTime()-Date.now()<30*864e5;
+    const st=sg?`✅ Signé${sg.type==="papier"?" (papier)":""} le ${CONS.fd(sg.signedAt)}${sg.type==="papier"?"":" par "+esc(((sg.data||{}).parents||[]).map(p=>p.nom).join(" et "))}${soon?` · <b style="color:#B5523B">partage de renseignements : échéance le ${CONS.fd(ech)}</b>`:""}${pd?` · nouveau lien envoyé le ${CONS.fd(pd.sentAt)}`:""}`
+      :pd?`⏳ Envoyé le ${CONS.fd(pd.sentAt)}, en attente de réponse`:"Aucun consentement dans le carnet";
+    return `<section class="card" style="padding:10px 14px"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b>Consentement</b><span class="small muted" style="flex:1 1 200px">${st}</span>
+      ${sg?`<button class="btn small" data-cons="view" data-id="${cid}" data-r="${sg.id}">Voir</button>`:""}
+      ${pd?`<button class="btn small" data-cons="share" data-id="${cid}" data-r="${pd.id}">Renvoyer le lien</button>`:`<button class="btn small${sg?" ghost":" primary"}" data-cons="send" data-id="${cid}">${sg?"Nouveau formulaire":"Envoyer le consentement"}</button>`}<button class="btn small ghost" data-cons="paper" data-id="${cid}">📄 Papier</button></div></section>`},
+  paper(cid){const c=S.children.get(cid);if(!assets){toast("Le téléversement n'est pas disponible ici.");return}
+    openSheet(`<h3>Consentement papier · ${esc(c.name)}</h3><p class="small muted" style="margin:0">Ajoutez la photo de chaque page du formulaire signé, ou le PDF numérisé.</p>
+      <label class="btn" style="margin:10px 0">📷 Choisir les pages (photos ou PDF)<input type="file" id="cpF" accept="image/*,application/pdf" multiple hidden></label><div id="cpL" class="small muted">Aucun fichier choisi.</div>
+      <label class="f">Date de la signature<input type="date" class="field" id="cpD" value="${todayISO()}"></label>
+      <label class="f">Note (facultatif)<input class="field" id="cpN" placeholder="Ex. : signé par la mère, refus pour les médias sociaux"></label>
+      <div class="row-actions"><button class="btn primary" id="cpOk" disabled>Ranger dans la fiche</button><button class="btn" id="cpNo">Annuler</button></div>`,s=>{
+        let files=[];const f=s.querySelector("#cpF");f.onchange=()=>{files=[...f.files];s.querySelector("#cpL").textContent=files.length?files.map(x=>x.name).join(", "):"Aucun fichier choisi.";s.querySelector("#cpOk").disabled=!files.length};
+        s.querySelector("#cpNo").onclick=closeSheet;
+        s.querySelector("#cpOk").onclick=()=>SYNC.act(async()=>{const b=s.querySelector("#cpOk");b.disabled=true;b.textContent="Envoi…";const out=[];
+          for(const x of files){const isImg=/^image\//.test(x.type);let blob=x;if(isImg&&typeof shrink==="function"){try{blob=await shrink(x)}catch(e){}}const r=await assets.upload(blob,{type:blob.type||x.type});out.push({id:r.id,mime:blob.type||x.type,name:x.name})}
+          const d=s.querySelector("#cpD").value||todayISO();
+          mutChild(cid,y=>{(y.consents=y.consents||[]).push({id:"cp"+Math.random().toString(36).slice(2,9),type:"papier",status:"signe",signedAt:d+"T12:00:00",addedAt:new Date().toISOString(),by:getMe(),note:s.querySelector("#cpN").value.trim(),files:out})});
+          closeSheet();render();toast("Consentement papier rangé")})})},
+  async openFile(id){const b=await LOCAL.getPhoto(id);if(!b){toast("Fichier introuvable sur cet appareil.");return}const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.target="_blank";a.rel="noopener";document.body.appendChild(a);a.click();setTimeout(()=>{a.remove()},1000)},
+  async preload(ids){await Promise.all(ids.map(async id=>{try{if(photoURLs.has(id))return;const b=await LOCAL.getPhoto(id);if(b)photoURLs.set(id,URL.createObjectURL(b))}catch(e){}}))},
+  async groupSheet(gid){const g=S.groups.get(gid);const kids=childrenOf(gid);
+    const rows=kids.map(([cid,c])=>{const L=CONS.list(c);const sg=L.find(r=>r.status==="signe");const pd=L.find(r=>r.status==="envoye");return {cid,c,sg,pd}});
+    const ids=rows.flatMap(r=>r.sg&&r.sg.files?r.sg.files.filter(f=>/^image\//.test(f.mime)).map(f=>f.id):[]);await CONS.preload(ids);
+    const pdfs=rows.flatMap(r=>r.sg&&r.sg.files?r.sg.files.filter(f=>!/^image\//.test(f.mime)).map(f=>({f,c:r.c})):[]);const n=rows.filter(r=>r.sg).length;
+    openSheet(`<h3>Consentements · ${esc(g.name)}</h3><p class="small muted" style="margin:0">${n} sur ${rows.length} signé${n>1?"s":""}.</p>
+      <div style="margin:8px 0">${rows.map(r=>`<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)"><b style="flex:1">${esc(r.c.name)}</b><span class="small">${r.sg?`✅ ${r.sg.type==="papier"?"papier, ":""}${CONS.fd(r.sg.signedAt)}`:r.pd?"⏳ en attente":"—"}</span>${r.sg?`<button class="btn small ghost" data-cons="view" data-id="${r.cid}" data-r="${r.sg.id}">Voir</button>`:""}</div>`).join("")}</div>
+      <div class="row-actions"><button class="btn primary" id="cgP" ${n?"":"disabled"}>Imprimer / PDF (${n})</button><button class="btn" id="cgC">Fermer</button></div>
+      ${pdfs.length?`<p class="small" style="margin:10px 0 4px"><b>PDF à joindre séparément</b> (ils ne peuvent pas être fusionnés dans le document) :</p>${pdfs.map(({f,c})=>`<button class="btn small ghost" data-cons="pdf" data-f="${f.id}">📄 ${esc(c.name)} · ${esc(f.name||"PDF")}</button>`).join(" ")}`:""}`,s=>{
+        s.querySelector("#cgC").onclick=closeSheet;
+        s.querySelector("#cgP").onclick=()=>printHTML(rows.filter(r=>r.sg).map(r=>`<div style="break-after:page">${CONS.docHTML(r.cid,r.sg.id)}</div>`).join(""))})},
+  async send(cid){if(!SYNC.on){toast("Activez d'abord la synchronisation.");return}const c=S.children.get(cid);const g=S.groups.get(c.groupId)||{};
+    const token=b64u.to(crypto.getRandomValues(new Uint8Array(16)));const raw=crypto.getRandomValues(new Uint8Array(16));const k=b64u.to(raw);
+    const key=await crypto.subtle.importKey("raw",raw,"AES-GCM",false,["encrypt"]);const iv=crypto.getRandomValues(new Uint8Array(12));
+    const meta={e:String(c.name||"").split(/\s+/)[0],g:String(g.name||"").replace(/\s*\([^)]*\)\s*$/,""),desc:CONS.desc(g),d:todayISO(),items:CONS.metaItems(g)};
+    const ct=await crypto.subtle.encrypt({name:"AES-GCM",iv},key,enc.encode(JSON.stringify(meta)));
+    await SYNC.be.consCreate(SYNC.space.id,token,b64(ct),b64(iv));
+    const id="cs"+token.slice(0,8);mutChild(cid,x=>{(x.consents=x.consents||[]).push({id,token,k,sentAt:new Date().toISOString(),status:"envoye",by:getMe()})});
+    CONS.share(cid,id)},
+  share(cid,rid){const c=S.children.get(cid);const r=(c.consents||[]).find(x=>x.id===rid);if(!r)return;const url=CONS.url(r.token,r.k);
+    const msg=`Bonjour! Voici le formulaire de consentement pour ${String(c.name||"").split(/\s+/)[0]} (classe nature). Ça prend environ 3 minutes, directement sur votre téléphone : ${url}`;
+    openSheet(`<h3>Envoyer le formulaire</h3><p class="small" style="margin:0 0 8px">Lien personnel pour <b>${esc(c.name)}</b>, valide 30 jours et utilisable une seule fois. Envoyez-le au parent par Messenger.</p>
+      <textarea class="field" id="csMsg" style="min-height:120px;font-size:.9rem">${esc(msg)}</textarea>
+      <div class="row-actions">${navigator.share?`<button class="btn primary" id="csShare">Partager (Messenger…)</button>`:""}<button class="btn${navigator.share?"":" primary"}" id="csCopy">Copier le message</button><button class="btn" id="csClose">Fermer</button></div>
+      <p class="muted small">Sur l'ordinateur : copiez le message, puis collez-le dans Messenger. La réponse arrivera toute seule dans la fiche de l'enfant.</p>`,s=>{
+        s.querySelector("#csClose").onclick=()=>{closeSheet();render()};
+        s.querySelector("#csCopy").onclick=()=>copyText(s.querySelector("#csMsg").value,"Message copié : collez-le dans Messenger");
+        const sh=s.querySelector("#csShare");if(sh)sh.onclick=()=>navigator.share({text:s.querySelector("#csMsg").value}).catch(()=>{})})},
+  async poll(){if(!SYNC.on||!SYNC.be.consList)return;const rows=await SYNC.be.consList(SYNC.space.id);
+    for(const row of rows||[]){let cid=null,rec=null;S.children.forEach((c,id)=>{const r=(c.consents||[]).find(x=>x.token===row.token);if(r){cid=id;rec=r}});
+      if(!rec)continue;if(rec.status==="signe"){try{await SYNC.be.consDelete(row.token)}catch(e){}continue}
+      let txt,data;try{const key=await crypto.subtle.importKey("raw",b64u.from(rec.k),"AES-GCM",false,["decrypt"]);txt=dec.decode(await crypto.subtle.decrypt({name:"AES-GCM",iv:unb64(row.payload_iv)},key,unb64(row.payload)));data=JSON.parse(txt)}catch(e){console.warn("consentement illisible",e);continue}
+      const h=[...new Uint8Array(await crypto.subtle.digest("SHA-256",enc.encode(txt)))].map(x=>x.toString(16).padStart(2,"0")).join("");
+      const E=data.enfant||{};
+      mutChild(cid,x=>{const r=(x.consents||[]).find(z=>z.token===row.token);if(!r)return;Object.assign(r,{status:"signe",signedAt:row.used_at||data.at,data,hash:h});
+        if(!x.dob&&/^\d{4}-\d{2}-\d{2}$/.test(E.ddn||""))x.dob=E.ddn;if(!x.nom&&E.nom){const pr=String(x.name||"").trim().toLowerCase(),full=String(E.nom).trim();if(full.toLowerCase().startsWith(pr+" ")&&full.length>pr.length+1)x.nom=full.slice(pr.length+1).trim()}const lg=[E.l1,E.l2,E.l3].filter(v=>String(v||"").trim()).join(", ");if(!x.langues&&lg)x.langues=lg;
+        x.infos=Object.assign({},x.infos||{},{nomComplet:E.nom||"",adresse:E.adresse||"",tel:E.tel||"",courriel:E.courriel||"",allergies:E.allergies?("Oui : "+(E.allergies_detail||"")):"Non",poids:E.poids||"",maj:todayISO(),src:"consentement"})});
+      try{await SYNC.be.consDelete(row.token)}catch(e){}toast("Consentement reçu pour "+(S.children.get(cid)||{}).name)}},
+  docHTML(cid,rid){const c=S.children.get(cid);const r=(c.consents||[]).find(x=>x.id===rid);if(!r)return "";
+    if(r.type==="papier"){const im=(r.files||[]).filter(f=>/^image\//.test(f.mime)),pf=(r.files||[]).filter(f=>!/^image\//.test(f.mime));
+      return `<div class="oxdoc cons"><h2 style="margin:0 0 2px">Consentement (formulaire papier)</h2><p class="muted small" style="margin:0">${esc(c.name)}${c.nom?" "+esc(c.nom):""} · ${esc((S.groups.get(c.groupId)||{}).name||"")}</p>
+        <p class="oxs small">Signé le ${CONS.fd(r.signedAt)} · téléversé le ${CONS.fd(r.addedAt)}${r.by?" par "+esc(r.by):""}${r.note?`<br>${esc(r.note)}`:""}</p>
+        ${im.map(f=>`<img src="${blobSrc(f.id)}" data-pid="${f.id}" alt="Page du consentement" style="width:100%;max-width:720px;display:block;margin:8px 0;border:1px solid #ddd">`).join("")}
+        ${pf.length?`<p class="oxs small">PDF joint : ${pf.map(f=>esc(f.name||"document.pdf")).join(", ")}</p>`:""}</div>`}
+    if(!r.data)return "";const D=r.data,E=D.enfant||{},T=D.textes||{};const ech=CONS.echeance(r);
+    const sec={};(T.items||[]).forEach(it=>{(sec[it.s]=sec[it.s]||[]).push(it)});
+    return `<div class="oxdoc cons"><div style="display:flex;justify-content:space-between;align-items:center"><img src="assets/logo-coclinique.png" alt="" style="height:54px"><img src="assets/logo-caal.png" alt="" style="height:60px"></div>
+      <h2 style="text-align:center;margin:8px 0 2px">Formulaire de consentement</h2><p class="muted small" style="text-align:center;margin:0">${esc(c.name)} · ${esc((S.groups.get(c.groupId)||{}).name||"")}</p>
+      <div class="oxk"><h3>Titulaire(s) de l'autorité parentale</h3>${(D.parents||[]).map(p=>`<p class="oxs">${esc(p.nom)}, en qualité de ${esc(p.qualite)}</p>`).join("")}${D.attestation?`<p class="oxs small"><b>Attestation :</b> ${esc(D.attestation)}</p>`:""}</div>
+      <div class="oxk"><h3>Le projet</h3><p class="oxs">${esc(T.desc||"")}</p></div>
+      <div class="oxk"><h3>L'enfant</h3><p class="oxs"><b>Prénom et nom :</b> ${esc(E.nom)} · <b>Date de naissance :</b> ${esc(E.ddn)}</p><p class="oxs"><b>Adresse :</b> ${esc(E.adresse)}</p><p class="oxs"><b>Téléphone :</b> ${esc(E.tel)}${E.courriel?` · <b>Courriel :</b> ${esc(E.courriel)}`:""}</p>
+        <p class="oxs"><b>Allergies :</b> ${E.allergies?"Oui, "+esc(E.allergies_detail):"Non"} · <b>Poids :</b> ${esc(E.poids)}</p><p class="oxs"><b>Langues :</b> ${esc([E.l1,E.l2,E.l3].filter(Boolean).join(", "))}</p></div>
+      ${Object.entries(sec).map(([s,L])=>`<div class="oxk"><h3>${esc(s)}</h3>${s==="Prise de risque saine"&&T.risque?`<p class="oxs small">${esc(T.risque)}</p>`:""}${L.map(it=>`<p class="oxs"><b style="display:inline-block;min-width:2.6em;color:${D.rep[it.k]?"#3D6A4A":"#8A6D5A"}">${D.rep[it.k]?"Oui":"Non"}</b> ${esc(it.t)}${it.l?` <span class="small">${esc(it.l.join(", "))}</span>`:""}</p>`).join("")}</div>`).join("")}
+      <div class="oxk"><h3>Droits</h3><p class="oxs small">${esc(T.droits||"")}</p></div>
+      <div class="oxk"><h3>Signature${(D.parents||[]).length>1?"s":""}</h3><div style="display:flex;gap:16px;flex-wrap:wrap">${(D.parents||[]).map(p=>`<figure style="margin:0"><img src="${p.sig}" alt="Signature" style="height:90px;max-width:280px;border-bottom:1px solid #999"><figcaption class="small">${esc(p.nom)}</figcaption></figure>`).join("")}</div>
+        <p class="oxs small">Signé électroniquement le ${new Date(r.signedAt).toLocaleString("fr-CA",{dateStyle:"long",timeStyle:"short"})}, par lien personnel envoyé le ${CONS.fd(r.sentAt)}${r.by?" par "+esc(r.by):""}.</p>
+        ${r.counter?`<p class="oxs small">Reçu et contresigné par ${esc(r.counter.by||"l'intervenante")} le ${CONS.fd(r.counter.at)}.</p>`:""}
+        ${ech?`<p class="oxs small">Autorisations de partage de renseignements valides jusqu'au ${CONS.fd(ech)}.</p>`:""}
+        <p class="oxs small muted">Empreinte numérique (SHA-256) : <span style="word-break:break-all">${r.hash}</span></p></div></div>`},
+  async view(cid,rid){const c=S.children.get(cid);const r=(c.consents||[]).find(x=>x.id===rid);if(!r)return;if(r.files)await CONS.preload(r.files.filter(f=>/^image\//.test(f.mime)).map(f=>f.id));
+    openSheet(`<h3>Consentement · ${esc(c.name)}</h3><p class="muted small" style="margin:0">Document verrouillé : il ne peut pas être modifié. Pour un changement, envoyez un nouveau formulaire.</p>
+      <div class="row-actions"><button class="btn primary" id="cvPrint">Imprimer / PDF</button>${(r.files||[]).filter(f=>!/^image\//.test(f.mime)).map(f=>`<button class="btn" data-cons="pdf" data-f="${f.id}">📄 Ouvrir ${esc(f.name||"le PDF")}</button>`).join("")}${r.counter?"":`<button class="btn" id="cvSign">Contresigner (réception)</button>`}<button class="btn" id="cvClose">Fermer</button></div>${CONS.docHTML(cid,rid)}`,s=>{
+        s.querySelector("#cvClose").onclick=closeSheet;s.querySelector("#cvPrint").onclick=()=>printHTML(CONS.docHTML(cid,rid));
+        const cs=s.querySelector("#cvSign");if(cs)cs.onclick=()=>{mutChild(cid,x=>{const z=(x.consents||[]).find(q=>q.id===rid);if(z&&!z.counter)z.counter={by:getMe()||"",at:new Date().toISOString()}});CONS.view(cid,rid);toast("Contresigné")}})}
+};
+document.addEventListener("click",e=>{const b=e.target.closest("[data-cons]");if(!b)return;e.preventDefault();const a=b.dataset.cons;
+  if(a==="send")SYNC.act(()=>CONS.send(b.dataset.id));else if(a==="share")CONS.share(b.dataset.id,b.dataset.r);else if(a==="view")CONS.view(b.dataset.id,b.dataset.r);
+  else if(a==="paper")CONS.paper(b.dataset.id);else if(a==="group")CONS.groupSheet(b.dataset.id);else if(a==="pdf")CONS.openFile(b.dataset.f)});
+document.addEventListener("click",e=>{const b=e.target.closest("[data-cset]");if(!b)return;e.preventDefault();CONS.settingsAct(b.dataset.cset,b)});
 
 document.addEventListener("click",e=>{const t=e.target.closest("[data-sync]");if(!t)return;e.preventDefault();SYNC.open()});
 (async function boot(){for(let i=0;i<200&&!(LOCAL.idb&&S.ready);i++)await sleep(100);if(LOCAL.idb)SYNC.start()})();
