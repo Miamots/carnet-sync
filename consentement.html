@@ -38,11 +38,7 @@ const H=new URLSearchParams(location.hash.slice(1));const TOKEN=H.get("t")||"",K
 const rpc=(fn,body)=>fetch(CFG.url+"/rest/v1/rpc/"+fn,{method:"POST",headers:{"apikey":CFG.key,"Content-Type":"application/json"},body:JSON.stringify(body)}).then(async r=>{if(!r.ok)throw new Error("Erreur "+r.status);return r.json()});
 const CO=["Émilie Jacob (psychoéducatrice)","Mélanie Champagne (TES)","Valérie Ferron (ergothérapeute)","Alexandra Tremblay (orthophoniste)","Francis Tremblay (orthophoniste)","Gabrielle Paquin (TES)"];
 const CAAL=["Marie Thielen","Molly Moar","Lydia Drouin-Tanguay","Caerline Brumie Soifaite","Stéphanie Bonsaint","Manon Doré","Emylou Lapalme","Anouk Comtois","Elena Trembay","Shanyng Versailles","Johanne Flamand","Luk Parlavecchio"];
-<<<<<<< HEAD
 let ITEMS=[
-=======
-const ITEMS=[
->>>>>>> 21998089ee505977c292da215e78e7453695af81
  {k:"services",s:"projet",t:"Je consens à ce que mon enfant participe au projet (description ci-dessus).",w:""},
  {k:"remplacant",s:"services",t:"En cas d'absence d'une intervenante, je consens à ce qu'un autre professionnel la remplace lors des sorties auprès de mon enfant.",w:"Ça veut dire : si Mélanie ou Valérie est absente, une autre professionnelle peut accompagner le groupe."},
  {k:"depistage",s:"services",t:"Je consens à ce que les professionnelles nommées réalisent et recueillent des observations cliniques auprès de mon enfant à des fins de dépistage. Le dépistage permet de voir si un enfant est à risque de présenter des difficultés sensorielles, motrices ou de régulation émotionnelle, et s'il pourrait bénéficier d'une évaluation en ergothérapie ou d'autres recommandations.",w:"Ça veut dire : on observe comment votre enfant bouge, joue et gère ses émotions, pour mieux l'aider. Ce n'est pas un diagnostic."},
@@ -72,10 +68,7 @@ async function boot(){if(!TOKEN||!KEYRAW){$("#app").innerHTML=`<div class="card 
   try{KEY=await crypto.subtle.importKey("raw",b64u.from(KEYRAW),"AES-GCM",false,["encrypt","decrypt"]);META=JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({name:"AES-GCM",iv:b64.from(r.iv)},KEY,b64.from(r.meta))))}
   catch(e){$("#app").innerHTML=`<div class="card notice err">Ce lien est abîmé (il a peut-être été coupé). Demandez un nouveau lien à l'intervenante.</div>`;return}
   try{const d=JSON.parse(localStorage.getItem(DK)||"null");if(d)ST=Object.assign(ST,d)}catch(e){}
-<<<<<<< HEAD
   if(Array.isArray(META.items)&&META.items.length)ITEMS=META.items;STEPS=buildSteps();
-=======
->>>>>>> 21998089ee505977c292da215e78e7453695af81
   if(!ST.e.nom&&META.e)ST.e.nom=META.e;draw()}
 const yn=k=>`<div class="yn" data-k="${k}"><button type="button" class="oui ${ST.r[k]===true?"on":""}" data-v="1">Oui</button><button type="button" class="non ${ST.r[k]===false?"on":""}" data-v="0">Non</button></div>`;
 const qHTML=it=>`<div class="q" id="q-${it.k}"><p>${esc(it.t)}</p>${it.l?`<ul class="names">${it.l.map(n=>`<li>${esc(n)}</li>`).join("")}</ul>`:""}${SHOW_WHY&&it.w?`<p class="why">${esc(it.w)}</p>`:""}${yn(it.k)}</div>`;
@@ -83,7 +76,6 @@ const inp=(k,lab,type,opt)=>`<label class="f">${lab}${opt?' <span class="muted s
 const QUAL=["Mère","Père","Tutrice","Tuteur","Autre titulaire de l'autorité parentale"];
 const parent=i=>`<div class="pp"><label class="f">Votre nom complet${i?" (2e parent)":""}<input data-p="${i}" data-pk="nom" value="${esc(ST.p[i].nom)}" autocomplete="${i?"off":"name"}"></label>
   <label class="f">En qualité de<select data-p="${i}" data-pk="qualite"><option value="">Choisir…</option>${QUAL.map(q=>`<option ${ST.p[i].qualite===q?"selected":""}>${q}</option>`).join("")}</select></label></div>`;
-<<<<<<< HEAD
 const ORDER=["services","partage","photos","carnet","risque"];
 let STEPS=[],SKEYS=[];
 function buildSteps(){SKEYS=["vous","projet","enfant"].concat(ORDER.filter(k=>ITEMS.some(it=>it.s===k)),["signature"]);STEPS=SKEYS.map(k=>({vous:"Vous",projet:"Le projet",enfant:"Votre enfant",signature:"Signature"}[k]||SEC[k]||k));return STEPS}
@@ -96,17 +88,6 @@ function stepHTML(n){const sec=k=>ITEMS.filter(x=>x.s===k).map(qHTML).join("");c
     ${inp("poids","Poids (kg ou lb)","text",1)}<label class="f">Langues parlées par mon enfant <span class="muted small">(facultatif)</span></label><div class="row">${["l1","l2","l3"].map((k,i)=>`<input data-e="${k}" placeholder="${["Langue principale","2e langue","3e langue"][i]}" value="${esc(ST.e[k]||"")}">`).join("")}</div>`;
   if(K==="risque")return `<div class="small">${RISQUE}</div>${sec("risque")}`;
   if(K!=="signature")return sec(K);
-=======
-const STEPS=["Vous","Le projet","Votre enfant","Les services","Partage de renseignements","Photos et vidéos","Les notes et le carnet","Prise de risque saine","Signature"];
-function stepHTML(n){const sec=k=>ITEMS.filter(x=>x.s===k).map(qHTML).join("");
-  if(n===0)return `<p class="small muted" style="margin:0">Titulaire de l'autorité parentale.</p>${parent(0)}${ST.two?parent(1)+`<button type="button" class="btn ghost" id="rm2" style="margin-top:8px">Retirer le 2e parent</button>`:`<button type="button" class="btn ghost" id="add2" style="margin-top:10px">+ Ajouter un 2e parent</button>`}`;
-  if(n===1)return `<p>${esc(META.desc||"")}</p>${sec("projet")}`;
-  if(n===2)return `${inp("nom","Prénom et nom de l'enfant")}${inp("ddn","Date de naissance","date")}${inp("adresse","Adresse")}${inp("tel","Numéro de téléphone du parent","tel")}${inp("courriel","Courriel","email",1)}
-    <div class="q" id="q-allergies" style="border:0;padding-bottom:0"><p style="font-weight:600;margin:12px 0 6px">Allergies</p>${yn("allergies")}${ST.r.allergies===true?inp("allergies_detail","Lesquelles?"):""}</div>
-    ${inp("poids","Poids (kg ou lb)")}<label class="f">Langues parlées par mon enfant</label><div class="row">${["l1","l2","l3"].map((k,i)=>`<input data-e="${k}" placeholder="${["Langue principale","2e langue","3e langue"][i]}" value="${esc(ST.e[k]||"")}">`).join("")}</div>`;
-  if(n===3)return sec("services");if(n===4)return sec("partage");if(n===5)return sec("photos");if(n===6)return sec("carnet");
-  if(n===7)return `<div class="small">${RISQUE}</div>${sec("risque")}`;
->>>>>>> 21998089ee505977c292da215e78e7453695af81
   return `<p class="small" style="margin:0 0 10px">${esc(DROITS)}</p><p class="small muted" style="margin:0">Signez avec votre doigt dans le cadre. En signant, vous confirmez vos réponses.</p>
     ${[0].concat(ST.two?[1]:[]).map(i=>`<p style="margin:12px 0 0;font-weight:600">${esc(ST.p[i].nom||(i?"2e parent":"Parent"))}</p><canvas class="sig" id="sig${i}"></canvas><button type="button" class="btn ghost" data-clr="${i}" style="margin-top:6px">Effacer</button>`).join("")}
     <p class="small muted">Date : ${new Date().toLocaleDateString("fr-CA",{day:"numeric",month:"long",year:"numeric"})}</p>`}
@@ -124,10 +105,7 @@ function bind(){
     if(k==="allergies"){draw();return}b.parentNode.querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b));b.closest(".q")&&b.closest(".q").classList.remove("miss")});
   document.querySelectorAll("[data-e]").forEach(i=>i.oninput=()=>{ST.e[i.dataset.e]=i.value;i.closest("label")&&i.closest("label").classList.remove("miss");save()});
   document.querySelectorAll("[data-p]").forEach(i=>{const h=()=>{ST.p[+i.dataset.p][i.dataset.pk]=i.value;i.closest("label").classList.remove("miss");save()};if(i.tagName==="SELECT")i.onchange=h;else i.oninput=h});
-<<<<<<< HEAD
   document.querySelectorAll("[data-att]").forEach(b=>b.onclick=()=>{ST.att=b.dataset.att;save();document.querySelectorAll("[data-att]").forEach(x=>x.classList.toggle("on",x===b));$("#q-att").classList.remove("miss")});
-=======
->>>>>>> 21998089ee505977c292da215e78e7453695af81
   const a2=$("#add2");if(a2)a2.onclick=()=>{ST.two=true;ST.p[1]=ST.p[1]||{nom:"",qualite:""};save();draw()};
   const r2=$("#rm2");if(r2)r2.onclick=()=>{ST.two=false;ST.p=[ST.p[0]];ST.sig[1]=null;save();draw()};
   document.querySelectorAll("canvas.sig").forEach(cv=>pad(cv,+cv.id.slice(3)));
@@ -135,19 +113,11 @@ function bind(){
   const nx=$("#next");if(nx)nx.onclick=()=>{if(check(ST.step||0,true))return;ST.step=(ST.step||0)+1;save();draw()};
   const bk=$("#back");if(bk)bk.onclick=()=>{ST.step=Math.max(0,(ST.step||0)-1);save();draw()};
   const sd=$("#send");if(sd)sd.onclick=send}
-<<<<<<< HEAD
 function missing(n){const L=[];const K=SKEYS[n];
   if(K==="vous"){[0].concat(ST.two?[1]:[]).forEach(i=>{if(!String(ST.p[i].nom||"").trim())L.push(`[data-p="${i}"][data-pk="nom"]`);if(!ST.p[i].qualite)L.push(`[data-p="${i}"][data-pk="qualite"]`)});if(!ST.two&&!ST.att)L.push("#q-att")}
   if(K==="enfant"){["nom","ddn","adresse","tel"].forEach(k=>{if(!String(ST.e[k]||"").trim())L.push(`[data-e="${k}"]`)});if(ST.r.allergies===undefined)L.push("#q-allergies");if(ST.r.allergies===true&&!String(ST.e.allergies_detail||"").trim())L.push('[data-e="allergies_detail"]')}
   if(K!=="vous"&&K!=="enfant"&&K!=="signature")ITEMS.filter(it=>it.s===K).forEach(it=>{if(ST.r[it.k]===undefined)L.push("#q-"+it.k)});
   if(K==="signature")[0].concat(ST.two?[1]:[]).forEach(i=>{if(!ST.sig[i])L.push("#sig"+i)});return L}
-=======
-function missing(n){const L=[];
-  if(n===0)[0].concat(ST.two?[1]:[]).forEach(i=>{if(!String(ST.p[i].nom||"").trim())L.push(`[data-p="${i}"][data-pk="nom"]`);if(!ST.p[i].qualite)L.push(`[data-p="${i}"][data-pk="qualite"]`)});
-  if(n===2){["nom","ddn","adresse","tel","poids"].forEach(k=>{if(!String(ST.e[k]||"").trim())L.push(`[data-e="${k}"]`)});if(ST.r.allergies===undefined)L.push("#q-allergies");if(ST.r.allergies===true&&!String(ST.e.allergies_detail||"").trim())L.push('[data-e="allergies_detail"]')}
-  const sk=["","projet","","services","partage","photos","carnet","risque"][n];if(sk)ITEMS.filter(it=>it.s===sk).forEach(it=>{if(ST.r[it.k]===undefined)L.push("#q-"+it.k)});
-  if(n===STEPS.length-1)[0].concat(ST.two?[1]:[]).forEach(i=>{if(!ST.sig[i])L.push("#sig"+i)});return L}
->>>>>>> 21998089ee505977c292da215e78e7453695af81
 function check(n,show){const L=missing(n);if(!L.length)return false;if(show){L.forEach(sel=>{const el=document.querySelector(sel);if(!el)return;(el.closest("label")||el).classList.add("miss")});
   $("#err").innerHTML=`<div class="notice err" style="margin-top:10px">Il manque ${L.length} réponse${L.length>1?"s":""} (en rouge).</div>`;const f=document.querySelector(".miss");f&&f.scrollIntoView({behavior:"smooth",block:"center"})}return true}
 function pad(cv,i){const r=cv.getBoundingClientRect(),dpr=window.devicePixelRatio||1;cv.width=r.width*dpr;cv.height=r.height*dpr;const x=cv.getContext("2d");x.scale(dpr,dpr);x.lineWidth=2.4;x.lineCap="round";x.lineJoin="round";x.strokeStyle="#1f2a22";
@@ -159,13 +129,8 @@ function pad(cv,i){const r=cv.getBoundingClientRect(),dpr=window.devicePixelRati
 async function send(){for(let n=0;n<STEPS.length;n++){if(missing(n).length){if(n!==(ST.step||0)){ST.step=n;save();draw()}check(n,true);return}}
   const b=$("#send");b.disabled=true;b.textContent="Envoi…";
   const at=new Date().toISOString();
-<<<<<<< HEAD
   const payload={v:2,at,attestation:ST.two?"":(ATT[ST.att]||""),parents:ST.p.slice(0,ST.two?2:1).map((p,i)=>({nom:p.nom.trim(),qualite:p.qualite,sig:ST.sig[i]})),enfant:Object.assign({},ST.e,{allergies:ST.r.allergies,allergies_detail:ST.r.allergies?ST.e.allergies_detail||"":""}),
     rep:Object.fromEntries(ITEMS.map(it=>[it.k,ST.r[it.k]])),textes:{desc:META.desc,items:ITEMS.map(it=>({k:it.k,s:SEC[it.s]||it.s,t:it.t,l:it.l||null,y365:it.y365||0})),risque:RISQUE.replace(/<[^>]+>/g," ").replace(/\s+/g," ").trim(),droits:DROITS},ua:navigator.userAgent};
-=======
-  const payload={v:1,at,parents:ST.p.slice(0,ST.two?2:1).map((p,i)=>({nom:p.nom.trim(),qualite:p.qualite,sig:ST.sig[i]})),enfant:Object.assign({},ST.e,{allergies:ST.r.allergies,allergies_detail:ST.r.allergies?ST.e.allergies_detail||"":""}),
-    rep:Object.fromEntries(ITEMS.map(it=>[it.k,ST.r[it.k]])),textes:{desc:META.desc,items:ITEMS.map(it=>({k:it.k,s:SEC[it.s],t:it.t,l:it.l||null})),risque:RISQUE.replace(/<[^>]+>/g," ").replace(/\s+/g," ").trim(),droits:DROITS},ua:navigator.userAgent};
->>>>>>> 21998089ee505977c292da215e78e7453695af81
   try{const iv=crypto.getRandomValues(new Uint8Array(12));const ct=await crypto.subtle.encrypt({name:"AES-GCM",iv},KEY,new TextEncoder().encode(JSON.stringify(payload)));
     const ok=await rpc("submit_consent",{t:TOKEN,d:b64.to(ct),i:b64.to(iv)});if(!ok)throw new Error("Ce formulaire a déjà été envoyé ou le lien a expiré.");
     const copy={at,e:META.e,g:META.g,parents:payload.parents.map(p=>p.nom+" ("+p.qualite+")"),rep:payload.rep};try{localStorage.removeItem(DK);localStorage.setItem(DK+"-ok",JSON.stringify(copy))}catch(e){}showDone(copy)}
