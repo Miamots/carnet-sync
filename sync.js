@@ -52,21 +52,26 @@ const ACC={a:"[aàâä]",e:"[eéèêë]",i:"[iîï]",o:"[oôö]",u:"[uùûü]",c
 const strip=t=>t.normalize("NFD").replace(/[\u0300-\u036f]/g,"");
 const tok=(p,i)=>p+"_"+(i<26?String.fromCharCode(65+i):String.fromCharCode(65+Math.floor(i/26)-1)+String.fromCharCode(65+i%26));
 const IA_DEF=`Agis en tant qu'assistant de rédaction clinique pour une ergothérapeute et une éducatrice spécialisée (enfants de 0 à 12 ans en classe nature). Réécris les notes d'observation brutes au propre en respectant ces règles :
-1. Ton clinique juste et équilibré (ni lunettes roses, ni lunettes noires) : rédige à la troisième personne (aucun « je » ni « nous »). Le texte doit être 100 % factuel et descriptif.
+1. Reformule chaque fois que c'est possible, au lieu de seulement corriger : langage clinique, juste et descriptif. Décris ce qui est observable, avec le vocabulaire professionnel approprié (ergothérapie, éducation spécialisée), plutôt qu'un jugement de valeur (« bonne », « pas bonne », « bien », « mal »). Ex. : « n'a pas une bonne prise de crayon » devient une description de la prise observée (type de prise, position des doigts et du pouce, mouvement).
+2. Ton clinique juste et équilibré (ni lunettes roses, ni lunettes noires) : rédige à la troisième personne (aucun « je » ni « nous » ; écris « l'adulte » ou « l'intervenante »). Le texte doit être 100 % factuel et descriptif.
 - Pas de lunettes noires : ne dramatise pas et ne sois pas centré uniquement sur les déficits. Décris les comportements difficiles de façon neutre (comme des obstacles à l'occupation), et nomme toujours les forces, les initiatives et les tentatives de l'enfant.
 - Pas de lunettes roses : ne minimise pas les difficultés, n'édulcore pas la réalité avec des tournures embellies et n'invente pas d'intentions positives non observées.
-2. Structure par habiletés : chaque note commence par le domaine clinique observé (ex. : « Motricité fine : », « Régulation émotionnelle : »).
-3. Intégrité des faits : conserve tous les détails, les déclencheurs exacts, les durées et les mots prononcés par l'enfant (entre guillemets). Ne résume pas au point de perdre de l'information.
-4. Orientation solutions (facilitateurs) : identifie clairement ce qui soutient l'enfant. Utilise au besoin « Stratégie de succès : » ou « À explorer : » pour mettre en valeur les adaptations de l'environnement ou les interventions de l'adulte qui ont fonctionné.`;
-const IA={rules(){const d=LOCAL.cache.get("config/ia");return d&&typeof d.regles==="string"?d.regles:IA_DEF},
-  setRules(v){db.doc("config/ia").set({regles:v})},
+3. Pas de titre ni de domaine au début de la note : la note est déjà rangée au bon endroit dans le carnet.
+4. Intégrité des faits : conserve tous les détails, les déclencheurs exacts, les durées et les mots prononcés par l'enfant (entre guillemets). Ne résume pas au point de perdre de l'information.
+5. Orientation solutions (facilitateurs) : identifie clairement ce qui soutient l'enfant. Utilise au besoin « Stratégie de succès : » ou « À explorer : » pour mettre en valeur les adaptations de l'environnement ou les interventions de l'adulte qui ont fonctionné.`;
+const IA_OLD="Agis en tant qu'assistant de rédaction clinique pour une ergothérapeute et une éducatrice spécialisée (enfants de 0 à 12 ans en classe nature). Réécris les notes d'observation brutes au propre en respectant ces règles :\n1. Ton clinique juste et équilibré (ni lunettes roses, ni lunettes noires) : rédige à la troisième personne (aucun « je » ni « nous »). Le texte doit être 100 % factuel et descriptif.\n- Pas de lunettes noires : ne dramatise pas et ne sois pas centré uniquement sur les déficits. Décris les comportements difficiles de façon neutre (comme des obstacles à l'occupation), et nomme toujours les forces, les initiatives et les tentatives de l'enfant.\n- Pas de lunettes roses : ne minimise pas les difficultés, n'édulcore pas la réalité avec des tournures embellies et n'invente pas d'intentions positives non observées.\n2. Structure par habiletés : chaque note commence par le domaine clinique observé (ex. : « Motricité fine : », « Régulation émotionnelle : »).\n3. Intégrité des faits : conserve tous les détails, les déclencheurs exacts, les durées et les mots prononcés par l'enfant (entre guillemets). Ne résume pas au point de perdre de l'information.\n4. Orientation solutions (facilitateurs) : identifie clairement ce qui soutient l'enfant. Utilise au besoin « Stratégie de succès : » ou « À explorer : » pour mettre en valeur les adaptations de l'environnement ou les interventions de l'adulte qui ont fonctionné.";
+const IA={rules(){const d=LOCAL.cache.get("config/ia");return d&&typeof d.regles==="string"&&d.regles!==IA_OLD?d.regles:IA_DEF},
+  setRules(v){const d=Object.assign({},LOCAL.cache.get("config/ia")||{});d.regles=v;db.doc("config/ia").set(d)},
+  noms(){const d=LOCAL.cache.get("config/ia");return String(d&&d.noms||"").split(/[,;\n]+/).map(x=>x.trim()).filter(x=>x.length>1)},
+  setNoms(v){const d=Object.assign({},LOCAL.cache.get("config/ia")||{});d.noms=v;if(typeof d.regles!=="string")d.regles=IA.rules();db.doc("config/ia").set(d)},
   on(){try{return localStorage.getItem("carnet-ia")==="1"}catch(e){return false}},
   set(v){try{localStorage.setItem("carnet-ia",v?"1":"0")}catch(e){}IA.apply()},
   apply(){sample=SYNC.on&&IA.on()?IA.sampler():null},
   table(){const pairs=[],back={};let k=0,a=0;
     S.children.forEach(c=>{if(!c||!c.name)return;const t=tok("Enfant",k++);back[t]=c.name;(typeof kidNames==="function"?kidNames(c):[c.name]).forEach(n=>pairs.push([n,t]))});
-    const ad=new Set();try{if(getMe())ad.add(getMe())}catch(e){}try{(getSign()||[]).forEach(x=>x&&x.nom&&ad.add(x.nom))}catch(e){}(SYNC._mem||[]).forEach(m=>m.display_name&&ad.add(m.display_name));
-    ad.forEach(full=>{const t=tok("Adulte",a++);back[t]=full.split(/\s+/)[0];full.split(/\s+/).filter(w=>w.length>1).forEach(w=>pairs.push([w,t]));pairs.push([full,t])});
+    const ad=new Set();try{if(getMe())ad.add(getMe())}catch(e){}try{(getSign()||[]).forEach(x=>x&&x.nom&&ad.add(x.nom))}catch(e){}(SYNC._mem||[]).forEach(m=>m.display_name&&ad.add(m.display_name));IA.noms().forEach(n=>ad.add(n));
+    const STOP=new Set(["le","la","les","de","du","des","l","d","école","ecole","cpe","centre","et"]);
+    ad.forEach(full=>{const t=tok("Adulte",a++);const W=full.split(/\s+/);back[t]=W.length>1&&W.every(w=>/^\p{Lu}/u.test(w))?W[0]:full;W.filter(w=>w.length>2&&/^\p{Lu}/u.test(w)&&!STOP.has(w.toLowerCase())).forEach(w=>pairs.push([w,t]));pairs.push([full,t])});
     pairs.sort((x,y)=>y[0].length-x[0].length);
     return{rx:pairs.filter(p=>p[0].trim().length>1).map(([n,t])=>[new RegExp("(?<![\\p{L}\\p{N}_])"+[...strip(n.trim())].map(ch=>{const l=ch.toLowerCase();return ACC[l]||ch.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")}).join("")+"(?![\\p{L}\\p{N}_])","giu"),t]),back}},
   mask(text){const T=IA.table();let s=String(text).normalize("NFC");T.rx.forEach(([r,t])=>{s=s.replace(r,t)});return{text:s,back:T.back}},
@@ -224,6 +229,7 @@ const SYNC=window.SYNC={on:false,status:"off",msg:"",user:null,space:null,key:nu
       <div id="syInvBox"></div>
       <div class="notice" style="margin-top:12px"><label class="chk"><input type="checkbox" id="syIA" ${IA.on()?"checked":""}> <span><b>IA dans le carnet</b> (Ranger les notes du terrain, Mettre au propre…)</span></label>
         <span class="small">Avant l'envoi, les prénoms des enfants et des adultes sont remplacés par des codes (Enfant_A…), puis remis dans la réponse sur cet appareil. Ni date de naissance ni photo ne sont envoyées.</span>
+        <details style="margin-top:6px"><summary class="small"><b>Autres noms à cacher</b> (adultes, intervenantes, école)</summary><p class="small muted" style="margin:4px 0">Les prénoms des enfants et le vôtre sont déjà cachés. Ajoutez ici les noms qui reviennent dans vos notes, séparés par des virgules.</p><textarea class="field" id="syNoms" style="min-height:70px" placeholder="Ex. : Gabrielle, Francis, Karine Dagenais, Le Préambule">${esc(IA.noms().join(", "))}</textarea><div class="row-actions"><button class="btn small primary" id="syNomsOk">Enregistrer</button></div></details>
         <details style="margin-top:6px"><summary class="small"><b>Mes consignes de rédaction</b></summary><textarea class="field" id="syRules" style="min-height:220px;font-size:.85rem">${esc(IA.rules())}</textarea>
           <div class="row-actions"><button class="btn small primary" id="syRulesOk">Enregistrer les consignes</button><button class="btn ghost small" id="syRulesDef">Remettre celles par défaut</button></div></details>
         ${SYNC.lastSent?`<div class="row-actions" style="margin-top:6px"><button class="btn ghost small" id="sySent">Voir le dernier envoi</button></div>`:""}</div>
@@ -233,6 +239,7 @@ const SYNC=window.SYNC={on:false,status:"off",msg:"",user:null,space:null,key:nu
         q("#syInv").onclick=()=>SYNC.act(async()=>{const A="ABCDEFGHJKMNPQRSTUVWXYZ23456789";const r=crypto.getRandomValues(new Uint8Array(8));const code=[...r].map(x=>A[x%A.length]).join("");
           await SYNC.be.createInvite(SYNC.space.id,code);
           q("#syInvBox").innerHTML=`<div class="notice" style="margin-top:10px">Code : <b style="font-size:1.3rem;letter-spacing:2px">${code.slice(0,4)}-${code.slice(4)}</b><br><span class="small">Valide 7 jours. Votre collègue installe le carnet test, crée son compte, choisit « Rejoindre avec un code » et entre ce code avec le <b>mot de passe du groupe</b> (dites-le-lui de vive voix, pas dans le même message).</span></div>`});
+        q("#syNomsOk").onclick=()=>{IA.setNoms(q("#syNoms").value);toast("Noms enregistrés : ils seront cachés à l'envoi")};
         q("#syRulesOk").onclick=()=>{IA.setRules(q("#syRules").value);toast("Consignes enregistrées")};
         q("#syRulesDef").onclick=()=>{q("#syRules").value=IA_DEF;IA.setRules(IA_DEF);toast("Consignes par défaut remises")};
         q("#syIA").onchange=e=>{IA.set(e.target.checked);toast(e.target.checked?"IA activée":"IA désactivée")};
