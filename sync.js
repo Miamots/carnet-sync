@@ -41,8 +41,32 @@ function supaBackend(){
     async pull(space,since){const out=[];for(let i=0;;i+=500){const d=ok(await sb.from("docs").select("id,data,iv,deleted,updated_at").eq("space_id",space).gt("updated_at",since).not("id","like","photos/%").order("updated_at").range(i,i+499));out.push(...d);if(d.length<500)break}return out},
     async upsert(space,rows){ok(await sb.from("docs").upsert(rows.map(r=>({space_id:space,id:r.id,data:r.data,iv:r.iv,deleted:!!r.deleted})),{onConflict:"space_id,id"}))},
     async getOne(space,id){return ok(await sb.from("docs").select("id,data,iv,deleted,updated_at").eq("space_id",space).eq("id",id).maybeSingle())},
+    async ai(prompt,json){const {data}=await sb.auth.getSession();const tok=data&&data.session&&data.session.access_token;if(!tok)throw new Error("Connexion requise");
+      const r=await fetch(CFG.url+"/functions/v1/ia",{method:"POST",headers:{"Authorization":"Bearer "+tok,"apikey":CFG.key,"Content-Type":"application/json"},body:JSON.stringify({prompt,json:!!json})});
+      const j=await r.json().catch(()=>({}));if(!r.ok){const e=new Error(j.error||("Erreur "+r.status));if(r.status===429)e.code="rate_limited";if(r.status===404)e.message="La fonction « ia » n'est pas encore installée dans Supabase.";throw e}return j.text||""},
     subscribe(space,cb){const ch=sb.channel("docs-"+space).on("postgres_changes",{event:"*",schema:"public",table:"docs",filter:"space_id=eq."+space},()=>cb()).subscribe();return()=>sb.removeChannel(ch)}
   }}
+
+/* ---------- IA : prénoms remplacés avant l'envoi ---------- */
+const ACC={a:"[aàâä]",e:"[eéèêë]",i:"[iîï]",o:"[oôö]",u:"[uùûü]",c:"[cç]",y:"[yÿ]"};
+const strip=t=>t.normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+const tok=(p,i)=>p+"_"+(i<26?String.fromCharCode(65+i):String.fromCharCode(65+Math.floor(i/26)-1)+String.fromCharCode(65+i%26));
+const IA={on(){try{return localStorage.getItem("carnet-ia")==="1"}catch(e){return false}},
+  set(v){try{localStorage.setItem("carnet-ia",v?"1":"0")}catch(e){}IA.apply()},
+  apply(){sample=SYNC.on&&IA.on()?IA.sampler():null},
+  table(){const pairs=[],back={};let k=0,a=0;
+    S.children.forEach(c=>{if(!c||!c.name)return;const t=tok("Enfant",k++);back[t]=c.name;(typeof kidNames==="function"?kidNames(c):[c.name]).forEach(n=>pairs.push([n,t]))});
+    const ad=new Set();try{if(getMe())ad.add(getMe())}catch(e){}try{(getSign()||[]).forEach(x=>x&&x.nom&&ad.add(x.nom))}catch(e){}(SYNC._mem||[]).forEach(m=>m.display_name&&ad.add(m.display_name));
+    ad.forEach(full=>{const t=tok("Adulte",a++);back[t]=full.split(/\s+/)[0];full.split(/\s+/).filter(w=>w.length>1).forEach(w=>pairs.push([w,t]));pairs.push([full,t])});
+    pairs.sort((x,y)=>y[0].length-x[0].length);
+    return{rx:pairs.filter(p=>p[0].trim().length>1).map(([n,t])=>[new RegExp("(?<![\\p{L}\\p{N}_])"+[...strip(n.trim())].map(ch=>{const l=ch.toLowerCase();return ACC[l]||ch.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")}).join("")+"(?![\\p{L}\\p{N}_])","giu"),t]),back}},
+  mask(text){const T=IA.table();let s=String(text).normalize("NFC");T.rx.forEach(([r,t])=>{s=s.replace(r,t)});return{text:s,back:T.back}},
+  unmask(s,back){return String(s).replace(/(Enfant|Adulte)_([A-Z]{1,2})(?![A-Za-z])/g,m=>back[m]||m)},
+  async ask(prompt,json){const m=IA.mask(prompt);SYNC.lastSent=m.text;const t=await SYNC.be.ai(m.text,json);SYNC.lastGot=t;return IA.unmask(t,m.back)},
+  parse(t){t=String(t).replace(/```(?:json)?/g,"");const i=t.search(/[\[{]/);const j=Math.max(t.lastIndexOf("}"),t.lastIndexOf("]"));if(i<0||j<i)throw {code:"format"};try{return JSON.parse(t.slice(i,j+1))}catch(e){throw {code:"format"}}},
+  sampler(){const f=async(prompt,opts)=>{const t=await IA.ask(prompt,false);try{opts&&opts.onText&&opts.onText({text:t})}catch(e){}return{text:t}};
+    f.json=async prompt=>IA.parse(await IA.ask(prompt,true));return f}};
+window.SYNC_IA=IA;
 
 /* ---------- Moteur ---------- */
 const SYNC=window.SYNC={on:false,status:"off",msg:"",user:null,space:null,key:null,be:null,lastAt:null,busy:false,_t:null,_unsub:null,_tombLen:0,
@@ -105,8 +129,8 @@ const SYNC=window.SYNC={on:false,status:"off",msg:"",user:null,space:null,key:nu
 
   async goLive(){SYNC.on=true;SYNC._tombLen=(LOCAL.meta.tomb||[]).length;if(SYNC._unsub)SYNC._unsub();
     try{SYNC._unsub=SYNC.be.subscribe(SYNC.space.id,()=>{if(SYNC.busy)SYNC._again=true;else SYNC.schedule(400)})}catch(e){}
-    SYNC.setStatus("pending");try{render()}catch(e){}await SYNC.run()},
-  stop(){SYNC.on=false;clearTimeout(SYNC._t);if(SYNC._unsub){SYNC._unsub();SYNC._unsub=null}},
+    SYNC.setStatus("pending");IA.apply();try{SYNC._mem=await SYNC.be.members(SYNC.space.id)}catch(e){}try{render()}catch(e){}await SYNC.run()},
+  stop(){SYNC.on=false;IA.apply();clearTimeout(SYNC._t);if(SYNC._unsub){SYNC._unsub();SYNC._unsub=null}},
 
   async start(){if(SYNC.be)return;
     try{SYNC.be=window.SYNC_FAKE?window.SYNC_FAKE():supaBackend()}catch(e){SYNC.setStatus("error","Module de synchro absent");return}
@@ -189,12 +213,17 @@ const SYNC=window.SYNC={on:false,status:"off",msg:"",user:null,space:null,key:nu
       ${mem.length?`<p class="small" style="margin:0 0 10px">Membres : ${mem.map(x=>esc(x.display_name||(x.user_id===u.uid?"vous":"collègue"))+(x.role==="responsable"?" (responsable)":"")).join(", ")}</p>`:""}
       <div class="row-actions"><button class="btn primary" id="syNow">Synchroniser maintenant</button><button class="btn" id="syInv">Inviter une collègue</button></div>
       <div id="syInvBox"></div>
+      <div class="notice" style="margin-top:12px"><label class="chk"><input type="checkbox" id="syIA" ${IA.on()?"checked":""}> <span><b>IA dans le carnet</b> (Ranger les notes du terrain, Mettre au propre…)</span></label>
+        <span class="small">Avant l'envoi, les prénoms des enfants et des adultes sont remplacés par des codes (Enfant_A…), puis remis dans la réponse sur cet appareil. Ni date de naissance ni photo ne sont envoyées.</span>
+        ${SYNC.lastSent?`<div class="row-actions" style="margin-top:6px"><button class="btn ghost small" id="sySent">Voir le dernier envoi</button></div>`:""}</div>
       <div class="row-actions" style="margin-top:14px"><button class="btn ghost small" id="syLock">Oublier le mot de passe du groupe sur cet appareil</button><button class="btn ghost small" id="syOut">Se déconnecter</button></div>`,s=>{
         const q=x=>s.querySelector(x);
         q("#syNow").onclick=()=>SYNC.act(async()=>{await SYNC.run();SYNC.open()});
         q("#syInv").onclick=()=>SYNC.act(async()=>{const A="ABCDEFGHJKMNPQRSTUVWXYZ23456789";const r=crypto.getRandomValues(new Uint8Array(8));const code=[...r].map(x=>A[x%A.length]).join("");
           await SYNC.be.createInvite(SYNC.space.id,code);
           q("#syInvBox").innerHTML=`<div class="notice" style="margin-top:10px">Code : <b style="font-size:1.3rem;letter-spacing:2px">${code.slice(0,4)}-${code.slice(4)}</b><br><span class="small">Valide 7 jours. Votre collègue installe le carnet test, crée son compte, choisit « Rejoindre avec un code » et entre ce code avec le <b>mot de passe du groupe</b> (dites-le-lui de vive voix, pas dans le même message).</span></div>`});
+        q("#syIA").onchange=e=>{IA.set(e.target.checked);toast(e.target.checked?"IA activée":"IA désactivée")};
+        q("#sySent")&&(q("#sySent").onclick=()=>openSheet(`<h3>Dernier envoi à l'IA</h3><p class="muted small" style="margin:0">Exactement ce qui a quitté l'appareil :</p><pre style="white-space:pre-wrap;font-size:.8rem;max-height:55vh;overflow:auto;background:#fff;padding:8px;border-radius:8px">${esc(SYNC.lastSent)}</pre><div class="row-actions"><button class="btn" id="syBack">Retour</button></div>`,s2=>s2.querySelector("#syBack").onclick=()=>SYNC.open()));
         q("#syLock").onclick=()=>SYNC.act(async()=>{SYNC.stop();await SYNC.keyPut(null);SYNC.key=null;SYNC.setStatus("locked");closeSheet();render()});
         q("#syOut").onclick=()=>SYNC.signOut()})})},
 
