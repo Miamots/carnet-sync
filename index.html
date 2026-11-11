@@ -1066,7 +1066,7 @@ function viewGroup(gid){S.fromTerrain=null;S.scOnly=null;
   ${tpl(g).objOnly?`<p class="muted small" style="margin:10px 0 0">Groupe 5-12 ans : touchez un jeune pour noter ses objectifs.</p>`:`<div class="label" style="margin:14px 0 6px">Mode activité · une observation pour tous</div>${scChips(gid)}<details class="sec" style="margin-top:6px"><summary class="small">Toutes les sections</summary><div class="secnav wrap">${OCCS.map(o=>`<a href="#g-${gid}--${o.subs[0]}"><img src="${img(o.img)}" alt="">${esc(shortT(o.titre))}</a>`).join("")}</div></details>`}
   </section>`;
   h+=todayHTML(gid,g,kids);
-  h+=objectivesHTML(gid,g,kids);
+  if(!g.hideGObj)h+=objectivesHTML(gid,g,kids);
   h+=calendarHTML(gid,g);
 
   if(kids.length)h+=covHTML(gid,g,kids);else h+=`<section class="card"><h3 style="font-size:1.35rem">Récapitulatif du groupe</h3><button class="btn" data-act="recap" data-id="${gid}">Ouvrir le récapitulatif</button></section>`;
@@ -1247,10 +1247,18 @@ function iaReview(gid,all,res){const lab={n:"N",f:"F",x:"X",q:"Q"};const rows=[]
     return `${head}<div class="ritem"><div class="sel"><input type="checkbox" id="iac${i}" checked> <span class="small muted">${it.date?fmtD(it.date):""} · ${where[it.kind]||""}</span></div>
     ${it.kind==="q"?`<select class="field" id="iak${i}"><option value="">Choisir l'enfant…</option>${kids.map(([k,c])=>`<option value="${k}" ${k===r.cid?"selected":""}>${esc(c.name)}</option>`).join("")}</select>`:""}
     ${r.after!==it.text.trim()?`<div class="before">${esc(it.text)}</div>`:""}<textarea class="field" id="iat${i}">${esc(r.after)}</textarea>
+    <div class="iacmd" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:4px"><input class="field" id="iaq${i}" placeholder="Commande ✨ (ex. : plus court)" style="flex:1 1 160px;min-width:0;padding:6px 10px;font-size:.88rem"><button class="btn small" data-iaq="${i}">✨ Reformuler</button>${["Plus court","Plus clinique","Sépare faits et hypothèses"].map(t=>`<button class="sugchip" data-iaqc="${i}" data-t="${t}">${t}</button>`).join("")}</div>
     ${it.kind==="n"||it.kind==="q"?`<span id="iadw${i}">${destSel(i,r.cid,r.dest)}</span>`:""}</div>`}).join("")}</div>
   <div class="row-actions"><button class="btn primary" id="iaSave">Enregistrer</button><button class="btn" id="iaNo">Annuler</button></div>`,s=>{
     s.querySelector("#iaNo").onclick=closeSheet;
     rows.forEach((r,i)=>{const k=s.querySelector("#iak"+i);if(k)k.onchange=()=>{s.querySelector("#iadw"+i).innerHTML=destSel(i,k.value,"")}});
+    const redo=async(i,cmd,btn)=>{cmd=String(cmd||"").trim();if(!cmd){s.querySelector("#iaq"+i).focus();return}const ta=s.querySelector("#iat"+i);const cid=s.querySelector("#iak"+i)?s.querySelector("#iak"+i).value:rows[i].cid;const who=nm(cid);
+      const old=btn.innerHTML;btn.disabled=true;btn.innerHTML='<span class="spinner" style="border-color:rgba(0,0,0,.2);border-top-color:var(--forest)"></span>';
+      try{const res=await sample(`Voici une note d'observation${who?" sur "+who:""} (classe nature). Réécris-la en suivant cette demande : « ${cmd} ». Garde tous les faits, les durées et les mots de l'enfant entre guillemets ; n'ajoute rien qui n'est pas observé. Réponds seulement avec la note réécrite, sans guillemets autour ni commentaire.\n\nNote d'origine : ${rows[i].it.text}\n\nVersion actuelle : ${ta.value}`,{modelTier:"default"});
+        const t=String(res&&res.text||"").trim();if(t){ta.value=t;s.querySelector("#iac"+i).checked=true}}
+      catch(e){toast("La reformulation n'a pas fonctionné.")}btn.disabled=false;btn.innerHTML=old};
+    s.querySelectorAll("[data-iaq]").forEach(b=>b.onclick=()=>redo(+b.dataset.iaq,s.querySelector("#iaq"+b.dataset.iaq).value,b));
+    s.querySelectorAll("[data-iaqc]").forEach(b=>b.onclick=()=>{s.querySelector("#iaq"+b.dataset.iaqc).value=b.dataset.t;redo(+b.dataset.iaqc,b.dataset.t,b)});
     s.querySelector("#iaSave").onclick=()=>{const picks=rows.map((r,i)=>({r,on:s.querySelector("#iac"+i).checked,text:s.querySelector("#iat"+i).value.trim(),cid:s.querySelector("#iak"+i)?s.querySelector("#iak"+i).value:r.cid,dest:s.querySelector("#iad"+i)?s.querySelector("#iad"+i).value:r.dest}));
       const miss=picks.filter(p=>p.on&&p.r.it.kind==="q"&&!p.cid).length;if(miss){toast(`Choisissez l'enfant pour ${miss} note${miss>1?"s":""}, ou décochez-la${miss>1?"s":""}.`);return}
       iaSave(gid,picks,auto)}})}
@@ -1643,7 +1651,7 @@ function objectivesHTML(gid,g,kids){
   S.ogInit=S.ogInit||new Set();if(objs.length&&!S.ogInit.has(gid)){openDetails.add("og-"+gid);S.ogInit.add(gid)}if(ed)openDetails.add("og-"+gid);
   let h=`<section class="card objcard"><details class="ogdet" data-dk="og-${gid}" ${openDetails.has("og-"+gid)?"open":""}><summary><h3 style="font-size:1.35rem;display:inline">Objectifs de groupe</h3> <span class="muted small">${objs.length?"("+objs.length+")":"aucun"}</span></summary>
   <div class="row-actions" style="margin-top:8px"><button class="btn small${ed?" primary":""}" data-act="objEdit" data-id="${gid}">${ed?"Terminer":objs.length?"Modifier les objectifs":"Ajouter un objectif"}</button></div>`;
-  if(!objs.length&&!ed){h+=`<p class="muted small" style="margin:6px 0 0">Des moments à suivre pour tout le groupe (arrivée, transitions, dîner…), puis on coche chaque enfant d'un geste.</p></details></section>`;return h}
+  if(!objs.length&&!ed){h+=`<p class="muted small" style="margin:6px 0 0">Des moments à suivre pour tout le groupe (arrivée, transitions, dîner…), puis on coche chaque enfant d'un geste.</p><div class="row-actions" style="margin-top:6px"><button class="btn ghost small" data-act="gObjHide" data-id="${gid}">Retirer de la page</button></div></details></section>`;return h}
   if(ed){h+=`<div class="entries" style="margin-top:10px">${objs.map(o=>`<div class="entry"><span class="txt">${esc(o.label)}</span><button class="x" aria-label="Retirer" data-act="objDel" data-id="${gid}" data-o="${o.id}">✕</button></div>`).join("")}</div>
     <div class="addline" style="margin-top:8px"><input class="field" id="objNew" placeholder="Nouvel objectif (ex. : Ranger son matériel)"><button class="btn primary" data-act="objAdd" data-id="${gid}">Ajouter</button></div>
     </details></section>`;return h}
@@ -1845,8 +1853,9 @@ function secStats(c,sec){let tot=0,on=0,last="";(sec.rows||[]).forEach(r=>{if(!r
   const nn=(c.notes||[]).filter(n=>n.section===sec.id).length;return{tot,on,last,nn}}
 
 function comboRowHTML(cid,c,s,cb){const nk="s|"+cid+"|"+s.id+"."+cb.id;const op=openRows.has(nk)||S.hideMode===cid;
-  const sum2=cb.combo.map(m=>{const key=s.id+"."+m.id;const lab=esc(String(m.label||"").replace(/\s*\([^)]*\)/g,"").trim());if(m.rep){const n=(m.steps||[]).filter((st,i)=>((c.checks||{})[key+"."+stK(st,i)]||[]).length).length;return `<span class="rsl">${lab}${n?` <em class="rsn">${n} coché${n>1?"s":""}</em>`:""}</span>`}return `<span class="rsl">${lab} ${cdots(c,key,m)}</span>`}).join("");
-  return `<div class="obsrow coll combo${op?" open":""}"><div class="rhead"><button class="schtog" data-act="schTog" data-k="${nk}" aria-expanded="${op}"><h4>${rowIc(s.id,(cb.combo&&cb.combo[0]||{}).id||"")}${esc(cb.label)}</h4><span class="rsum">${sum2}</span></button></div>${op?"":miniPh(c,cid,cb.combo.map(m=>s.id+"."+m.id))}${op?`<div class="combin">${cb.combo.map(m=>rowHTML(cid,c,s,Object.assign({},m,{nocoll:true}))).join("")}</div>`:""}</div>`}
+  const sum2=cb.combo.map(m=>{const key=s.id+"."+m.id;const lab=esc(String(m.label||"").replace(/\s*\([^)]*\)/g,"").trim());if(m.rep){const n=(m.steps||[]).filter((st,i)=>((c.checks||{})[key+"."+stK(st,i)]||[]).length).length;return n?`<span class="rsl">${lab} <em class="rsn">${n} coché${n>1?"s":""}</em></span>`:""}return `<span class="rsl">${lab} ${cdots(c,key,m)}</span>`}).join("");
+  const sum3=sum2||(cb.combo.every(m=>m.rep)?`<span class="rsl muted">${cb.combo.length} à explorer · toucher pour ouvrir</span>`:"");
+  return `<div class="obsrow coll combo${op?" open":""}"><div class="rhead"><button class="schtog" data-act="schTog" data-k="${nk}" aria-expanded="${op}"><h4>${rowIc(s.id,(cb.combo&&cb.combo[0]||{}).id||"")}${esc(cb.label)}</h4><span class="rsum">${sum3}</span></button></div>${op?"":miniPh(c,cid,cb.combo.map(m=>s.id+"."+m.id))}${op?`<div class="combin">${cb.combo.map(m=>rowHTML(cid,c,s,Object.assign({},m,{nocoll:true}))).join("")}</div>`:""}</div>`}
 function viewChild(cid,secId){ensureRepaired(cid);
   const c=S.children.get(cid);if(!c){crumbs([]);return`<div class="card empty">Cette fiche n'existe plus. <a href="#accueil">Retour aux groupes</a></div>`}
   const g=S.groups.get(c.groupId)||{name:"Groupe"};const T={nom:tpl(g).nom,sections:childSections(c)};
@@ -2507,6 +2516,7 @@ document.addEventListener("click",e=>{
   else if(a==="eclairs")eclairGroupSheet(id);
   else if(a==="notesMenu")notesMenu(id);
   else if(a==="iaAll")iaRun(id);
+  else if(a==="gObjHide"){mutGroup(id,x=>{x.hideGObj=true});toast("Retiré. Pour le remettre : Modifier le groupe.")}
   else if(a==="scEdit")scSheet(id);
   else if(a==="regG"){S.regG=k;render()}
   else if(a==="qnSort")qnSortSheet(id,b.dataset.q);
@@ -2709,13 +2719,14 @@ function groupSheet(gid){const g=gid?S.groups.get(gid):{name:"",template:"0-4",e
   <label class="f">Fiche utilisée<select class="field" id="gTpl">${Object.entries(TEMPLATES).map(([k,t])=>`<option value="${k}" ${g.template===k?"selected":""}>${esc(t.nom)}</option>`).join("")}</select></label>
   ${gid?`<p class="muted small" style="margin:-4px 0 0">Changer de fiche garde les observations communes ; les repères propres à l'autre fiche restent enregistrés mais ne s'affichent plus.</p>`:""}
   ${gid?"":`<label class="f">Enfants (facultatif)<textarea class="field" id="gKids" style="min-height:110px" placeholder="Un prénom par ligne, ou séparés par des virgules"></textarea></label>`}
+  ${gid?`<label class="chk"><input type="checkbox" id="gShowObj" ${g.hideGObj?"":"checked"}> Afficher « Objectifs de groupe » sur la page du groupe</label>`:""}
   <label class="f">Équipe (facultatif)<input class="field" id="gEq" value="${esc(g.equipe||"")}" placeholder="Ex. : ergo + TES"></label>
   <div class="f"><span style="font-weight:600;font-size:.92rem">Emblème</span><div class="avpick" style="grid-template-columns:repeat(4,1fr)">${Object.entries(EMBLEMS).map(([k,em])=>`<button type="button" data-em="${k}" class="${g.emblem===k?"on":""}" title="${em.nom}"><img src="${img(em.img)}" alt="${em.nom}"></button>`).join("")}</div></div>
   <div class="row-actions"><button class="btn primary" id="gSave">${gid?"Enregistrer":"Créer le groupe"}</button><button class="btn" id="gCancel">Annuler</button>${gid?`<button class="btn danger" id="gDel" style="margin-left:auto">Supprimer</button>`:""}</div>`,s=>{
     let em=g.emblem||"mesanges";s.querySelectorAll("[data-em]").forEach(x=>x.onclick=()=>{em=x.dataset.em;s.querySelectorAll("[data-em]").forEach(y=>y.classList.toggle("on",y===x))});
     s.querySelector("#gCancel").onclick=closeSheet;
     s.querySelector("#gSave").onclick=()=>{const name=s.querySelector("#gName").value.trim();if(!name){s.querySelector("#gName").focus();return}
-      const id=gid||uid("g");const obj=Object.assign({journal:[],createdAt:todayISO()},gid?JSON.parse(JSON.stringify(g)):{},{name,template:s.querySelector("#gTpl").value,emblem:em,equipe:s.querySelector("#gEq").value.trim()});
+      const id=gid||uid("g");const obj=Object.assign({journal:[],createdAt:todayISO()},gid?JSON.parse(JSON.stringify(g)):{},{name,template:s.querySelector("#gTpl").value,emblem:em,equipe:s.querySelector("#gEq").value.trim()});const so=s.querySelector("#gShowObj");if(so){if(so.checked)delete obj.hideGObj;else obj.hideGObj=true}
       S.groups.set(id,obj);persist("groups",id);if(!gid)addKids(id,(s.querySelector("#gKids")||{}).value||"");closeSheet();gid?render():go("g-"+id)};
     if(gid)s.querySelector("#gDel").onclick=()=>{const kids=childrenOf(gid);confirmSheet(`Supprimer le groupe ${g.name}${kids.length?" et ses "+kids.length+" fiches":""} ?`,()=>{kids.forEach(([cid])=>{S.children.delete(cid);persist("children",cid)});S.groups.delete(gid);persist("groups",gid);go("accueil")})};
   })}

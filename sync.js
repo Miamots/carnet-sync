@@ -51,7 +51,16 @@ function supaBackend(){
 const ACC={a:"[aàâä]",e:"[eéèêë]",i:"[iîï]",o:"[oôö]",u:"[uùûü]",c:"[cç]",y:"[yÿ]"};
 const strip=t=>t.normalize("NFD").replace(/[\u0300-\u036f]/g,"");
 const tok=(p,i)=>p+"_"+(i<26?String.fromCharCode(65+i):String.fromCharCode(65+Math.floor(i/26)-1)+String.fromCharCode(65+i%26));
-const IA={on(){try{return localStorage.getItem("carnet-ia")==="1"}catch(e){return false}},
+const IA_DEF=`Agis en tant qu'assistant de rédaction clinique pour une ergothérapeute et une éducatrice spécialisée (enfants de 0 à 12 ans en classe nature). Réécris les notes d'observation brutes au propre en respectant ces règles :
+1. Ton clinique juste et équilibré (ni lunettes roses, ni lunettes noires) : rédige à la troisième personne (aucun « je » ni « nous »). Le texte doit être 100 % factuel et descriptif.
+- Pas de lunettes noires : ne dramatise pas et ne sois pas centré uniquement sur les déficits. Décris les comportements difficiles de façon neutre (comme des obstacles à l'occupation), et nomme toujours les forces, les initiatives et les tentatives de l'enfant.
+- Pas de lunettes roses : ne minimise pas les difficultés, n'édulcore pas la réalité avec des tournures embellies et n'invente pas d'intentions positives non observées.
+2. Structure par habiletés : chaque note commence par le domaine clinique observé (ex. : « Motricité fine : », « Régulation émotionnelle : »).
+3. Intégrité des faits : conserve tous les détails, les déclencheurs exacts, les durées et les mots prononcés par l'enfant (entre guillemets). Ne résume pas au point de perdre de l'information.
+4. Orientation solutions (facilitateurs) : identifie clairement ce qui soutient l'enfant. Utilise au besoin « Stratégie de succès : » ou « À explorer : » pour mettre en valeur les adaptations de l'environnement ou les interventions de l'adulte qui ont fonctionné.`;
+const IA={rules(){const d=LOCAL.cache.get("config/ia");return d&&typeof d.regles==="string"?d.regles:IA_DEF},
+  setRules(v){db.doc("config/ia").set({regles:v})},
+  on(){try{return localStorage.getItem("carnet-ia")==="1"}catch(e){return false}},
   set(v){try{localStorage.setItem("carnet-ia",v?"1":"0")}catch(e){}IA.apply()},
   apply(){sample=SYNC.on&&IA.on()?IA.sampler():null},
   table(){const pairs=[],back={};let k=0,a=0;
@@ -62,7 +71,7 @@ const IA={on(){try{return localStorage.getItem("carnet-ia")==="1"}catch(e){retur
     return{rx:pairs.filter(p=>p[0].trim().length>1).map(([n,t])=>[new RegExp("(?<![\\p{L}\\p{N}_])"+[...strip(n.trim())].map(ch=>{const l=ch.toLowerCase();return ACC[l]||ch.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")}).join("")+"(?![\\p{L}\\p{N}_])","giu"),t]),back}},
   mask(text){const T=IA.table();let s=String(text).normalize("NFC");T.rx.forEach(([r,t])=>{s=s.replace(r,t)});return{text:s,back:T.back}},
   unmask(s,back){return String(s).replace(/(Enfant|Adulte)_([A-Z]{1,2})(?![A-Za-z])/g,m=>back[m]||m)},
-  async ask(prompt,json){const m=IA.mask(prompt);SYNC.lastSent=m.text;const t=await SYNC.be.ai(m.text,json);SYNC.lastGot=t;return IA.unmask(t,m.back)},
+  async ask(prompt,json){const r=IA.rules().trim();if(r)prompt="CONSIGNES DE RÉDACTION DE L'ERGOTHÉRAPEUTE (à suivre pour tout texte que tu écris ; dans le carnet, chaque note reste une entrée séparée et tu respectes le format de réponse demandé plus bas) :\n"+r+"\n\n---\n\n"+prompt;const m=IA.mask(prompt);SYNC.lastSent=m.text;const t=await SYNC.be.ai(m.text,json);SYNC.lastGot=t;return IA.unmask(t,m.back)},
   parse(t){t=String(t).replace(/```(?:json)?/g,"");const i=t.search(/[\[{]/);const j=Math.max(t.lastIndexOf("}"),t.lastIndexOf("]"));if(i<0||j<i)throw {code:"format"};try{return JSON.parse(t.slice(i,j+1))}catch(e){throw {code:"format"}}},
   sampler(){const f=async(prompt,opts)=>{const t=await IA.ask(prompt,false);try{opts&&opts.onText&&opts.onText({text:t})}catch(e){}return{text:t}};
     f.json=async prompt=>IA.parse(await IA.ask(prompt,true));return f}};
@@ -215,6 +224,8 @@ const SYNC=window.SYNC={on:false,status:"off",msg:"",user:null,space:null,key:nu
       <div id="syInvBox"></div>
       <div class="notice" style="margin-top:12px"><label class="chk"><input type="checkbox" id="syIA" ${IA.on()?"checked":""}> <span><b>IA dans le carnet</b> (Ranger les notes du terrain, Mettre au propre…)</span></label>
         <span class="small">Avant l'envoi, les prénoms des enfants et des adultes sont remplacés par des codes (Enfant_A…), puis remis dans la réponse sur cet appareil. Ni date de naissance ni photo ne sont envoyées.</span>
+        <details style="margin-top:6px"><summary class="small"><b>Mes consignes de rédaction</b></summary><textarea class="field" id="syRules" style="min-height:220px;font-size:.85rem">${esc(IA.rules())}</textarea>
+          <div class="row-actions"><button class="btn small primary" id="syRulesOk">Enregistrer les consignes</button><button class="btn ghost small" id="syRulesDef">Remettre celles par défaut</button></div></details>
         ${SYNC.lastSent?`<div class="row-actions" style="margin-top:6px"><button class="btn ghost small" id="sySent">Voir le dernier envoi</button></div>`:""}</div>
       <div class="row-actions" style="margin-top:14px"><button class="btn ghost small" id="syLock">Oublier le mot de passe du groupe sur cet appareil</button><button class="btn ghost small" id="syOut">Se déconnecter</button></div>`,s=>{
         const q=x=>s.querySelector(x);
@@ -222,6 +233,8 @@ const SYNC=window.SYNC={on:false,status:"off",msg:"",user:null,space:null,key:nu
         q("#syInv").onclick=()=>SYNC.act(async()=>{const A="ABCDEFGHJKMNPQRSTUVWXYZ23456789";const r=crypto.getRandomValues(new Uint8Array(8));const code=[...r].map(x=>A[x%A.length]).join("");
           await SYNC.be.createInvite(SYNC.space.id,code);
           q("#syInvBox").innerHTML=`<div class="notice" style="margin-top:10px">Code : <b style="font-size:1.3rem;letter-spacing:2px">${code.slice(0,4)}-${code.slice(4)}</b><br><span class="small">Valide 7 jours. Votre collègue installe le carnet test, crée son compte, choisit « Rejoindre avec un code » et entre ce code avec le <b>mot de passe du groupe</b> (dites-le-lui de vive voix, pas dans le même message).</span></div>`});
+        q("#syRulesOk").onclick=()=>{IA.setRules(q("#syRules").value);toast("Consignes enregistrées")};
+        q("#syRulesDef").onclick=()=>{q("#syRules").value=IA_DEF;IA.setRules(IA_DEF);toast("Consignes par défaut remises")};
         q("#syIA").onchange=e=>{IA.set(e.target.checked);toast(e.target.checked?"IA activée":"IA désactivée")};
         q("#sySent")&&(q("#sySent").onclick=()=>openSheet(`<h3>Dernier envoi à l'IA</h3><p class="muted small" style="margin:0">Exactement ce qui a quitté l'appareil :</p><pre style="white-space:pre-wrap;font-size:.8rem;max-height:55vh;overflow:auto;background:#fff;padding:8px;border-radius:8px">${esc(SYNC.lastSent)}</pre><div class="row-actions"><button class="btn" id="syBack">Retour</button></div>`,s2=>s2.querySelector("#syBack").onclick=()=>SYNC.open()));
         q("#syLock").onclick=()=>SYNC.act(async()=>{SYNC.stop();await SYNC.keyPut(null);SYNC.key=null;SYNC.setStatus("locked");closeSheet();render()});
