@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="fr-CA"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer">
+<title>Formulaire de consentement · classe nature</title>
+<style>
+:root{--forest:#3D6A4A;--bg:#F7F3EA;--card:#FFFDF8;--line:#E4DCCB;--ink:#2E3830;--muted:#6B7369;--sun:#E8B84A;--err:#B5523B}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:640px;margin:0 auto;padding:14px 14px 80px}
+header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:4px 0 10px}header img{height:64px;width:auto}
+h1{font-size:1.45rem;margin:6px 0 2px;color:var(--forest)}h2{font-size:1.15rem;margin:0 0 8px;color:var(--forest)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin:12px 0}
+.muted{color:var(--muted)}.small{font-size:.88rem}
+label.f{display:block;margin:10px 0 0;font-weight:600;font-size:.95rem}
+input,select,textarea{width:100%;font:inherit;padding:11px 12px;border:1px solid #CFC6B3;border-radius:12px;background:#fff;margin-top:4px}
+.row{display:flex;gap:8px}.row>*{flex:1}
+.q{border-top:1px dashed var(--line);padding:12px 0 4px}.q:first-of-type{border-top:0}
+.q p{margin:0 0 6px}.why{font-size:.86rem;color:var(--muted);margin:0 0 8px}
+.yn{display:flex;gap:10px}.yn button{flex:1;font:inherit;font-weight:700;padding:12px;border-radius:12px;border:2px solid #CFC6B3;background:#fff;color:var(--ink)}
+.yn button.on.oui{background:var(--forest);border-color:var(--forest);color:#fff}.yn button.on.non{background:#8A6D5A;border-color:#8A6D5A;color:#fff}
+.q.miss .yn button{border-color:var(--err)}.miss input,.miss select{border-color:var(--err)}
+ul.names{margin:4px 0 8px 18px;padding:0;font-size:.9rem}
+.sig{border:2px dashed #CFC6B3;border-radius:12px;background:#fff;touch-action:none;width:100%;height:170px;display:block;margin-top:6px}
+.sig.miss{border-color:var(--err)}
+.btn{display:inline-block;font:inherit;font-weight:700;padding:13px 18px;border-radius:999px;border:0;background:var(--forest);color:#fff;width:100%;margin-top:12px}
+.btn.ghost{background:transparent;color:var(--forest);border:1px solid var(--forest);width:auto;padding:8px 14px;font-size:.9rem}
+.notice{background:#FFF6DB;border:1px solid #EBD38A;border-radius:12px;padding:10px 12px;font-size:.92rem}
+.notice.err{background:#FBE9E4;border-color:#E3B2A4}
+.done{text-align:center}.done .big{font-size:3rem}
+.sum p{margin:4px 0}.sum b{display:inline-block;min-width:2.6em}
+@media print{body{background:#fff}.noprint{display:none!important}.card{break-inside:avoid;border-color:#ccc}}
+</style></head><body><main id="app"><p class="muted">Chargement du formulaire…</p></main>
+<script>
+const CFG={url:"https://lvwotuglgilspssufihp.supabase.co",key:"sb_publishable_-CD7IcAGCJ9c_bwV7pIhiw_6OZXbFcB"};
+const $=s=>document.querySelector(s);const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const b64u={to:b=>btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""),from:s=>Uint8Array.from(atob(s.replace(/-/g,"+").replace(/_/g,"/")+"===".slice((s.length+3)%4)),c=>c.charCodeAt(0))};
+const b64={to:b=>{const a=new Uint8Array(b);let s="";for(let i=0;i<a.length;i+=0x8000)s+=String.fromCharCode.apply(null,a.subarray(i,i+0x8000));return btoa(s)},from:s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0))};
+const H=new URLSearchParams(location.hash.slice(1));const TOKEN=H.get("t")||"",KEYRAW=H.get("k")||"";
+const rpc=(fn,body)=>fetch(CFG.url+"/rest/v1/rpc/"+fn,{method:"POST",headers:{"apikey":CFG.key,"Content-Type":"application/json"},body:JSON.stringify(body)}).then(async r=>{if(!r.ok)throw new Error("Erreur "+r.status);return r.json()});
+const CO=["Émilie Jacob (psychoéducatrice)","Mélanie Champagne (TES)","Valérie Ferron (ergothérapeute)","Alexandra Tremblay (orthophoniste)","Francis Tremblay (orthophoniste)","Gabrielle Paquin (TES)"];
+const CAAL=["Marie Thielen","Molly Moar","Lydia Drouin-Tanguay","Caerline Brumie Soifaite","Stéphanie Bonsaint","Manon Doré","Emylou Lapalme","Anouk Comtois","Elena Trembay","Shanyng Versailles","Johanne Flamand","Luk Parlavecchio"];
+const ITEMS=[
+ {k:"services",s:"projet",t:"Je consens à ce que mon enfant participe au projet (description ci-dessus).",w:""},
+ {k:"remplacant",s:"services",t:"En cas d'absence d'une intervenante, je consens à ce qu'un autre professionnel la remplace lors des sorties auprès de mon enfant.",w:"Ça veut dire : si Mélanie ou Valérie est absente, une autre professionnelle peut accompagner le groupe."},
+ {k:"depistage",s:"services",t:"Je consens à ce que les professionnelles nommées réalisent et recueillent des observations cliniques auprès de mon enfant à des fins de dépistage. Le dépistage permet de voir si un enfant est à risque de présenter des difficultés sensorielles, motrices ou de régulation émotionnelle, et s'il pourrait bénéficier d'une évaluation en ergothérapie ou d'autres recommandations.",w:"Ça veut dire : on observe comment votre enfant bouge, joue et gère ses émotions, pour mieux l'aider. Ce n'est pas un diagnostic."},
+ {k:"comm_co",s:"partage",t:"Je consens au partage d'informations verbales et de documents écrits jugés pertinents (ex. : rapport d'évaluation) entre les professionnelles qui travaillent auprès de mon enfant chez CO Clinique, pour une période de 365 jours :",l:CO,w:"Ça veut dire : ces personnes peuvent se parler de votre enfant pour mieux l'accompagner, pendant un an."},
+ {k:"comm_caal",s:"partage",t:"Je consens au partage d'informations verbales et de documents écrits jugés pertinents entre les intervenantes qui travaillent auprès de mon enfant au CAAL, pour une période de 365 jours :",l:CAAL,w:"Ça veut dire : l'équipe et l'équipe du CAAL peuvent se parler de votre enfant, pendant un an."},
+ {k:"photos",s:"photos",t:"Je consens à ce que Mélanie Champagne, éducatrice spécialisée, et Valérie Ferron, ergothérapeute, prennent des photos de mon enfant lors des sorties. Les photos pourront être utilisées à des fins pédagogiques.",w:"Ça veut dire : des photos pour garder des traces de ce que votre enfant fait et apprend."},
+ {k:"photos_parents",s:"photos",t:"J'autorise la diffusion aux autres parents des photos où se trouve mon enfant.",w:""},
+ {k:"photos_media",s:"photos",t:"J'autorise le CAAL à diffuser les photos de mon enfant sur ses médias sociaux.",w:""},
+ {k:"stockage",s:"carnet",t:"Je consens à ce que les observations soient conservées dans un carnet numérique chiffré, hébergé sur un serveur au Canada, accessible seulement aux professionnelles qui accompagnent mon enfant.",w:"Ça veut dire : les notes sont protégées par un mot de passe que seules les intervenantes connaissent."},
+ {k:"ia",s:"carnet",t:"J'accepte que des outils d'intelligence artificielle aident les professionnelles à mettre leurs notes au propre, sans jamais recevoir le nom de mon enfant.",w:"Ça veut dire : un outil aide à écrire les notes plus vite. Le nom de votre enfant est remplacé par un code avant l'envoi. Les professionnelles relisent tout."},
+ {k:"risque",s:"risque",t:"J'ai lu le texte sur la prise de risque saine et je consens à ce que mon enfant participe aux activités nature avec une prise de risque saine, sous la supervision des professionnelles présentes.",w:""}];
+const SEC={projet:"Le projet",services:"Les services",partage:"Partage de renseignements",photos:"Photos et vidéos",carnet:"Les notes et le carnet",risque:"Prise de risque saine"};
+const RISQUE=`<p>Dans le cadre des sorties nature, nous encourageons la prise de risque saine et réfléchie pour favoriser le développement des enfants. Nous croyons que l'exploration et les défis adaptés sont essentiels au développement de l'autonomie, de la confiance en soi et des compétences motrices et sensorielles.</p>
+<p>Afin de veiller à la santé et à la sécurité des enfants, nous, en tant qu'adultes responsables, nous engageons à :</p><ul><li>éliminer les dangers réels par des évaluations régulières des bénéfices et des risques;</li><li>superviser les activités pour que les risques pris par les enfants soient appropriés à leur âge et à leur niveau de compétence;</li><li>intervenir de manière proactive pour prévenir les accidents, sans empêcher les enfants de prendre des risques calculés.</li></ul>
+<p>Malgré toutes nos précautions et nos mesures de prévention, il est possible que votre enfant subisse des blessures, comme dans tout environnement naturel ou autre. Nous nous engageons à réagir rapidement et efficacement pour prendre soin de votre enfant en cas de blessure.</p>`;
+const DROITS=`Votre consentement est libre : vous pouvez répondre Non à une autorisation, et la retirer en tout temps, sans conséquence sur les services, en écrivant ou en parlant à Valérie Ferron ou Mélanie Champagne. Vous pouvez aussi demander à consulter ou à corriger les renseignements sur votre enfant. Responsable de la protection des renseignements : Valérie Ferron, ergothérapeute.`;
+let KEY=null,META=null,ST={p:[{nom:"",qualite:""}],e:{},r:{},sig:[null,null],two:false};
+const DK="cons-"+TOKEN;
+function save(){try{localStorage.setItem(DK,JSON.stringify(ST))}catch(e){}}
+async function boot(){if(!TOKEN||!KEYRAW){$("#app").innerHTML=`<div class="card notice err">Ce lien est incomplet. Demandez un nouveau lien à l'intervenante.</div>`;return}
+  try{if(localStorage.getItem(DK+"-ok")){return showDone(JSON.parse(localStorage.getItem(DK+"-ok")))}}catch(e){}
+  let r;try{r=await rpc("get_consent",{t:TOKEN})}catch(e){$("#app").innerHTML=`<div class="card notice err">Impossible d'ouvrir le formulaire. Vérifiez votre connexion internet, puis réessayez.</div>`;return}
+  if(!r){$("#app").innerHTML=`<div class="card notice err">Ce formulaire n'existe plus. Demandez un nouveau lien à l'intervenante.</div>`;return}
+  if(r.used){$("#app").innerHTML=`<div class="card done"><div class="big">✓</div><h1>Déjà rempli</h1><p>Ce formulaire a déjà été envoyé. Merci!</p></div>`;return}
+  if(r.expired){$("#app").innerHTML=`<div class="card notice err">Ce lien a expiré. Demandez un nouveau lien à l'intervenante.</div>`;return}
+  try{KEY=await crypto.subtle.importKey("raw",b64u.from(KEYRAW),"AES-GCM",false,["encrypt","decrypt"]);META=JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({name:"AES-GCM",iv:b64.from(r.iv)},KEY,b64.from(r.meta))))}
+  catch(e){$("#app").innerHTML=`<div class="card notice err">Ce lien est abîmé (il a peut-être été coupé). Demandez un nouveau lien à l'intervenante.</div>`;return}
+  try{const d=JSON.parse(localStorage.getItem(DK)||"null");if(d)ST=Object.assign(ST,d)}catch(e){}
+  if(!ST.e.nom&&META.e)ST.e.nom=META.e;draw()}
+const yn=k=>`<div class="yn" data-k="${k}"><button type="button" class="oui ${ST.r[k]===true?"on":""}" data-v="1">Oui</button><button type="button" class="non ${ST.r[k]===false?"on":""}" data-v="0">Non</button></div>`;
+const qHTML=it=>`<div class="q" id="q-${it.k}"><p>${esc(it.t)}</p>${it.l?`<ul class="names">${it.l.map(n=>`<li>${esc(n)}</li>`).join("")}</ul>`:""}${it.w?`<p class="why">${esc(it.w)}</p>`:""}${yn(it.k)}</div>`;
+const inp=(k,lab,type,opt)=>`<label class="f">${lab}${opt?' <span class="muted small">(facultatif)</span>':""}<input data-e="${k}" type="${type||"text"}" value="${esc(ST.e[k]||"")}" ${type==="tel"?'inputmode="tel" autocomplete="tel"':""}></label>`;
+const QUAL=["Mère","Père","Tutrice","Tuteur","Autre titulaire de l'autorité parentale"];
+const parent=i=>`<div class="pp"><label class="f">Votre nom complet${i?" (2e parent)":""}<input data-p="${i}" data-pk="nom" value="${esc(ST.p[i].nom)}" autocomplete="${i?"off":"name"}"></label>
+  <label class="f">En qualité de<select data-p="${i}" data-pk="qualite"><option value="">Choisir…</option>${QUAL.map(q=>`<option ${ST.p[i].qualite===q?"selected":""}>${q}</option>`).join("")}</select></label></div>`;
+function draw(){const sec=s=>ITEMS.filter(x=>x.s===s).map(qHTML).join("");
+  $("#app").innerHTML=`<header><img src="assets/logo-coclinique.png" alt="CO Clinique"><img src="assets/logo-caal.png" alt="CAAL"></header>
+  <h1>Formulaire de consentement</h1><p class="muted" style="margin:0">Pour <b>${esc(META.e||"votre enfant")}</b>${META.g?" · "+esc(META.g):""}<br><span class="small">Environ 3 minutes. Vos réponses restent sur ce téléphone si vous êtes interrompu.</span></p>
+  <div class="card"><h2>Vous</h2><p class="small muted" style="margin:0">Titulaire de l'autorité parentale.</p>${parent(0)}
+    ${ST.two?parent(1)+`<button type="button" class="btn ghost" id="rm2" style="margin-top:8px">Retirer le 2e parent</button>`:`<button type="button" class="btn ghost" id="add2" style="margin-top:10px">+ Ajouter un 2e parent</button>`}</div>
+  <div class="card"><h2>${SEC.projet}</h2><p>${esc(META.desc||"")}</p>${sec("projet")}</div>
+  <div class="card"><h2>Votre enfant</h2>${inp("nom","Prénom et nom de l'enfant")}${inp("ddn","Date de naissance","date")}${inp("adresse","Adresse")}${inp("tel","Numéro de téléphone du parent","tel")}${inp("courriel","Courriel","email",1)}
+    <div class="q" id="q-allergies" style="border:0;padding-bottom:0"><p style="font-weight:600;margin:12px 0 6px">Allergies</p>${yn("allergies")}${ST.r.allergies===true?inp("allergies_detail","Lesquelles?"):""}</div>
+    ${inp("poids","Poids (kg ou lb)")}
+    <label class="f">Langues parlées par mon enfant</label><div class="row">${["l1","l2","l3"].map((k,i)=>`<input data-e="${k}" placeholder="${["Langue principale","2e langue","3e langue"][i]}" value="${esc(ST.e[k]||"")}">`).join("")}</div></div>
+  <div class="card"><h2>${SEC.services}</h2>${sec("services")}</div>
+  <div class="card"><h2>${SEC.partage}</h2>${sec("partage")}</div>
+  <div class="card"><h2>${SEC.photos}</h2>${sec("photos")}</div>
+  <div class="card"><h2>${SEC.carnet}</h2>${sec("carnet")}</div>
+  <div class="card"><h2>${SEC.risque}</h2><div class="small">${RISQUE}</div>${sec("risque")}</div>
+  <div class="card"><h2>Vos droits</h2><p class="small" style="margin:0">${esc(DROITS)}</p></div>
+  <div class="card"><h2>Signature</h2><p class="small muted" style="margin:0">Signez avec votre doigt dans le cadre. En signant, vous confirmez vos réponses ci-dessus.</p>
+    ${[0].concat(ST.two?[1]:[]).map(i=>`<p style="margin:12px 0 0;font-weight:600">${esc(ST.p[i].nom||(i?"2e parent":"Parent"))}</p><canvas class="sig" id="sig${i}"></canvas><button type="button" class="btn ghost" data-clr="${i}" style="margin-top:6px">Effacer</button>`).join("")}
+    <p class="small muted">Date : ${new Date().toLocaleDateString("fr-CA",{day:"numeric",month:"long",year:"numeric"})}</p>
+    <div id="err"></div><button class="btn" id="send">Envoyer le formulaire</button></div>`;
+  bind()}
+function bind(){
+  document.querySelectorAll(".yn button").forEach(b=>b.onclick=()=>{const k=b.parentNode.dataset.k;ST.r[k]=b.dataset.v==="1";save();
+    if(k==="allergies"){draw();return}b.parentNode.querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b));b.closest(".q")&&b.closest(".q").classList.remove("miss")});
+  document.querySelectorAll("[data-e]").forEach(i=>i.oninput=()=>{ST.e[i.dataset.e]=i.value;i.closest("label")&&i.closest("label").classList.remove("miss");save()});
+  document.querySelectorAll("[data-p]").forEach(i=>{const h=()=>{ST.p[+i.dataset.p][i.dataset.pk]=i.value;i.closest("label").classList.remove("miss");save()};if(i.tagName==="SELECT")i.onchange=h;else i.oninput=h});
+  const a2=$("#add2");if(a2)a2.onclick=()=>{ST.two=true;ST.p[1]=ST.p[1]||{nom:"",qualite:""};save();draw()};
+  const r2=$("#rm2");if(r2)r2.onclick=()=>{ST.two=false;ST.p=[ST.p[0]];ST.sig[1]=null;save();draw()};
+  document.querySelectorAll("canvas.sig").forEach(cv=>pad(cv,+cv.id.slice(3)));
+  document.querySelectorAll("[data-clr]").forEach(b=>b.onclick=()=>{ST.sig[+b.dataset.clr]=null;save();const cv=$("#sig"+b.dataset.clr);cv.getContext("2d").clearRect(0,0,cv.width,cv.height)});
+  $("#send").onclick=send}
+function pad(cv,i){const r=cv.getBoundingClientRect(),dpr=window.devicePixelRatio||1;cv.width=r.width*dpr;cv.height=r.height*dpr;const x=cv.getContext("2d");x.scale(dpr,dpr);x.lineWidth=2.4;x.lineCap="round";x.lineJoin="round";x.strokeStyle="#1f2a22";
+  if(ST.sig[i]){const im=new Image();im.onload=()=>x.drawImage(im,0,0,r.width,r.height);im.src=ST.sig[i]}
+  let on=false,moved=false;const P=e=>{const b=cv.getBoundingClientRect();return [e.clientX-b.left,e.clientY-b.top]};
+  cv.onpointerdown=e=>{on=true;moved=false;cv.setPointerCapture(e.pointerId);const [a,b]=P(e);x.beginPath();x.moveTo(a,b)};
+  cv.onpointermove=e=>{if(!on)return;const [a,b]=P(e);x.lineTo(a,b);x.stroke();moved=true};
+  cv.onpointerup=cv.onpointercancel=()=>{if(!on)return;on=false;if(moved){ST.sig[i]=cv.toDataURL("image/png");cv.classList.remove("miss");save()}}}
+async function send(){const miss=[];const mark=el=>{if(el){el.classList.add("miss");miss.push(el)}};
+  [0].concat(ST.two?[1]:[]).forEach(i=>{if(!String(ST.p[i].nom||"").trim())mark(document.querySelector(`[data-p="${i}"][data-pk="nom"]`).closest("label"));if(!ST.p[i].qualite)mark(document.querySelector(`[data-p="${i}"][data-pk="qualite"]`).closest("label"));if(!ST.sig[i])mark($("#sig"+i))});
+  ["nom","ddn","adresse","tel","poids"].forEach(k=>{if(!String(ST.e[k]||"").trim())mark(document.querySelector(`[data-e="${k}"]`).closest("label"))});
+  if(ST.r.allergies===undefined)mark($("#q-allergies"));if(ST.r.allergies===true&&!String(ST.e.allergies_detail||"").trim())mark(document.querySelector('[data-e="allergies_detail"]').closest("label"));
+  ITEMS.forEach(it=>{if(ST.r[it.k]===undefined)mark($("#q-"+it.k))});
+  if(miss.length){$("#err").innerHTML=`<div class="notice err" style="margin-top:10px">Il manque ${miss.length} réponse${miss.length>1?"s":""} (en rouge).</div>`;miss[0].scrollIntoView({behavior:"smooth",block:"center"});return}
+  const b=$("#send");b.disabled=true;b.textContent="Envoi…";
+  const at=new Date().toISOString();
+  const payload={v:1,at,parents:ST.p.slice(0,ST.two?2:1).map((p,i)=>({nom:p.nom.trim(),qualite:p.qualite,sig:ST.sig[i]})),enfant:Object.assign({},ST.e,{allergies:ST.r.allergies,allergies_detail:ST.r.allergies?ST.e.allergies_detail||"":""}),
+    rep:Object.fromEntries(ITEMS.map(it=>[it.k,ST.r[it.k]])),textes:{desc:META.desc,items:ITEMS.map(it=>({k:it.k,s:SEC[it.s],t:it.t,l:it.l||null})),risque:RISQUE.replace(/<[^>]+>/g," ").replace(/\s+/g," ").trim(),droits:DROITS},ua:navigator.userAgent};
+  try{const iv=crypto.getRandomValues(new Uint8Array(12));const ct=await crypto.subtle.encrypt({name:"AES-GCM",iv},KEY,new TextEncoder().encode(JSON.stringify(payload)));
+    const ok=await rpc("submit_consent",{t:TOKEN,d:b64.to(ct),i:b64.to(iv)});if(!ok)throw new Error("Ce formulaire a déjà été envoyé ou le lien a expiré.");
+    const copy={at,e:META.e,g:META.g,parents:payload.parents.map(p=>p.nom+" ("+p.qualite+")"),rep:payload.rep};try{localStorage.removeItem(DK);localStorage.setItem(DK+"-ok",JSON.stringify(copy))}catch(e){}showDone(copy)}
+  catch(e){b.disabled=false;b.textContent="Envoyer le formulaire";$("#err").innerHTML=`<div class="notice err" style="margin-top:10px">L'envoi n'a pas fonctionné${e&&e.message?" : "+esc(e.message):""}. Vos réponses sont gardées : réessayez dans un moment.</div>`}}
+function showDone(c){const lab=Object.fromEntries(ITEMS.map(it=>[it.k,it.t]));
+  $("#app").innerHTML=`<header><img src="assets/logo-coclinique.png" alt="CO Clinique"><img src="assets/logo-caal.png" alt="CAAL"></header>
+  <div class="card done"><div class="big">✓</div><h1>Merci!</h1><p>Le formulaire pour <b>${esc(c.e||"votre enfant")}</b> a bien été envoyé à l'équipe.</p><p class="small muted">Vous pouvez garder cette page comme copie (capture d'écran ou impression). L'équipe peut aussi vous envoyer la copie complète.</p>
+    <button class="btn ghost noprint" onclick="print()">Imprimer ou enregistrer en PDF</button></div>
+  <div class="card sum"><h2>Votre copie</h2><p class="small">Envoyé le ${new Date(c.at).toLocaleString("fr-CA",{dateStyle:"long",timeStyle:"short"})}${c.g?" · "+esc(c.g):""}<br>Par : ${esc((c.parents||[]).join(", "))}</p>
+    ${Object.entries(c.rep||{}).map(([k,v])=>`<p class="small"><b>${v?"Oui":"Non"}</b> ${esc(lab[k]||k)}</p>`).join("")}<p class="small muted">${esc(DROITS)}</p></div>`}
+boot();
+</script></body></html>

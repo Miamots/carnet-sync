@@ -44,6 +44,9 @@ function supaBackend(){
     async ai(prompt,json,max){const {data}=await sb.auth.getSession();const tok=data&&data.session&&data.session.access_token;if(!tok)throw new Error("Connexion requise");
       const r=await fetch(CFG.url+"/functions/v1/ia",{method:"POST",headers:{"Authorization":"Bearer "+tok,"apikey":CFG.key,"Content-Type":"application/json"},body:JSON.stringify({prompt,json:!!json,max:max||undefined})});
       const j=await r.json().catch(()=>({}));if(!r.ok){const e=new Error(j.error||("Erreur "+r.status));if(r.status===429)e.code="rate_limited";if(r.status===404)e.message="La fonction « ia » n'est pas encore installée dans Supabase.";throw e}return j.text||""},
+    async consCreate(space,token,meta,iv){ok(await sb.from("consent_requests").insert({token,space_id:space,meta,meta_iv:iv}))},
+    async consList(space){return ok(await sb.from("consent_requests").select("token,payload,payload_iv,used_at").eq("space_id",space).not("used_at","is",null))},
+    async consDelete(token){ok(await sb.from("consent_requests").delete().eq("token",token))},
     subscribe(space,cb){const ch=sb.channel("docs-"+space).on("postgres_changes",{event:"*",schema:"public",table:"docs",filter:"space_id=eq."+space},()=>cb()).subscribe();return()=>sb.removeChannel(ch)}
   }}
 
@@ -102,7 +105,7 @@ const SYNC=window.SYNC={on:false,status:"off",msg:"",user:null,space:null,key:nu
   schedule(ms){if(!SYNC.on)return;clearTimeout(SYNC._t);SYNC._t=setTimeout(()=>SYNC.run(),ms||0)},
 
   async run(){if(!SYNC.on||SYNC.busy)return;if(!navigator.onLine){SYNC.setStatus("offline");return}
-    SYNC.busy=true;try{await SYNC.pull();await SYNC.push();SYNC.lastAt=new Date();SYNC.setStatus(SYNC.dirty().length?"pending":"ok")}
+    SYNC.busy=true;try{await SYNC.pull();await SYNC.push();try{await CONS.poll()}catch(e){console.warn("consentements",e)}SYNC.lastAt=new Date();SYNC.setStatus(SYNC.dirty().length?"pending":"ok")}
     catch(e){console.warn("sync",e);SYNC.setStatus(navigator.onLine?"error":"offline",e&&e.message)}
     finally{SYNC.busy=false;if(SYNC._again){SYNC._again=false;SYNC.schedule(300)}}},
 
@@ -254,6 +257,72 @@ const SYNC=window.SYNC={on:false,status:"off",msg:"",user:null,space:null,key:nu
   async act(fn){try{await fn()}catch(e){console.warn(e);const m=String(e&&e.message||e);
     toast(/Invalid login/i.test(m)?"Courriel ou mot de passe incorrect.":/already registered/i.test(m)?"Ce courriel a déjà un compte : connectez-vous.":/Email not confirmed/i.test(m)?"Courriel pas encore confirmé : ouvrez le lien reçu.":/fetch|network/i.test(m)?"Pas de connexion au serveur.":m.length<140?m:"Erreur : "+m.slice(0,120))}}
 };
+
+/* ---------- Consentements envoyés aux parents ---------- */
+const b64u={to:b=>btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""),from:s=>Uint8Array.from(atob(s.replace(/-/g,"+").replace(/_/g,"/")+"===".slice((s.length+3)%4)),c=>c.charCodeAt(0))};
+const CONS=window.CONS={DESC_DEF:"Le projet a pour but de stimuler les habiletés de motricité, d'autonomie, de régulation émotionnelle, de langage et d'habiletés sociales. Il est animé par Mélanie Champagne, éducatrice spécialisée, et Valérie Ferron, ergothérapeute. Les rencontres ont lieu en forêt et le transport est assuré par le CAAL.",
+  desc(g){return (g&&g.consDesc)||CONS.DESC_DEF},
+  list(c){return (c&&c.consents||[]).slice().sort((a,b)=>String(b.sentAt).localeCompare(String(a.sentAt)))},
+  url(t,k){return location.origin+location.pathname.replace(/[^/]*$/,"")+"consentement.html#t="+t+"&k="+k},
+  fd(iso){return iso?new Date(iso).toLocaleDateString("fr-CA",{day:"numeric",month:"long",year:"numeric"}):""},
+  echeance(r){if(!r||!r.signedAt)return null;const d=new Date(r.signedAt);d.setDate(d.getDate()+365);return d},
+  card(cid){const c=S.children.get(cid);if(!c)return "";const L=CONS.list(c);const sg=L.find(r=>r.status==="signe");const pd=L.find(r=>r.status==="envoye"&&new Date(r.sentAt).getTime()+30*864e5>Date.now());
+    const ech=CONS.echeance(sg);const soon=ech&&ech.getTime()-Date.now()<30*864e5;
+    const st=sg?`✅ Signé le ${CONS.fd(sg.signedAt)} par ${esc((sg.data.parents||[]).map(p=>p.nom).join(" et "))}${soon?` · <b style="color:#B5523B">partage de renseignements : échéance le ${CONS.fd(ech)}</b>`:""}${pd?` · nouveau lien envoyé le ${CONS.fd(pd.sentAt)}`:""}`
+      :pd?`⏳ Envoyé le ${CONS.fd(pd.sentAt)}, en attente de réponse`:"Aucun consentement dans le carnet";
+    return `<section class="card" style="padding:10px 14px"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b>Consentement</b><span class="small muted" style="flex:1 1 200px">${st}</span>
+      ${sg?`<button class="btn small" data-cons="view" data-id="${cid}" data-r="${sg.id}">Voir</button>`:""}
+      ${pd?`<button class="btn small" data-cons="share" data-id="${cid}" data-r="${pd.id}">Renvoyer le lien</button>`:`<button class="btn small${sg?" ghost":" primary"}" data-cons="send" data-id="${cid}">${sg?"Nouveau formulaire":"Envoyer le consentement"}</button>`}</div></section>`},
+  async send(cid){if(!SYNC.on){toast("Activez d'abord la synchronisation.");return}const c=S.children.get(cid);const g=S.groups.get(c.groupId)||{};
+    const token=b64u.to(crypto.getRandomValues(new Uint8Array(16)));const raw=crypto.getRandomValues(new Uint8Array(16));const k=b64u.to(raw);
+    const key=await crypto.subtle.importKey("raw",raw,"AES-GCM",false,["encrypt"]);const iv=crypto.getRandomValues(new Uint8Array(12));
+    const meta={e:String(c.name||"").split(/\s+/)[0],g:String(g.name||"").replace(/\s*\([^)]*\)\s*$/,""),desc:CONS.desc(g),d:todayISO()};
+    const ct=await crypto.subtle.encrypt({name:"AES-GCM",iv},key,enc.encode(JSON.stringify(meta)));
+    await SYNC.be.consCreate(SYNC.space.id,token,b64(ct),b64(iv));
+    const id="cs"+token.slice(0,8);mutChild(cid,x=>{(x.consents=x.consents||[]).push({id,token,k,sentAt:new Date().toISOString(),status:"envoye",by:getMe()})});
+    CONS.share(cid,id)},
+  share(cid,rid){const c=S.children.get(cid);const r=(c.consents||[]).find(x=>x.id===rid);if(!r)return;const url=CONS.url(r.token,r.k);
+    const msg=`Bonjour! Voici le formulaire de consentement pour ${String(c.name||"").split(/\s+/)[0]} (classe nature). Ça prend environ 3 minutes, directement sur votre téléphone : ${url}`;
+    openSheet(`<h3>Envoyer le formulaire</h3><p class="small" style="margin:0 0 8px">Lien personnel pour <b>${esc(c.name)}</b>, valide 30 jours et utilisable une seule fois. Envoyez-le au parent par Messenger.</p>
+      <textarea class="field" id="csMsg" style="min-height:120px;font-size:.9rem">${esc(msg)}</textarea>
+      <div class="row-actions">${navigator.share?`<button class="btn primary" id="csShare">Partager (Messenger…)</button>`:""}<button class="btn${navigator.share?"":" primary"}" id="csCopy">Copier le message</button><button class="btn" id="csClose">Fermer</button></div>
+      <p class="muted small">Sur l'ordinateur : copiez le message, puis collez-le dans Messenger. La réponse arrivera toute seule dans la fiche de l'enfant.</p>`,s=>{
+        s.querySelector("#csClose").onclick=()=>{closeSheet();render()};
+        s.querySelector("#csCopy").onclick=()=>copyText(s.querySelector("#csMsg").value,"Message copié : collez-le dans Messenger");
+        const sh=s.querySelector("#csShare");if(sh)sh.onclick=()=>navigator.share({text:s.querySelector("#csMsg").value}).catch(()=>{})})},
+  async poll(){if(!SYNC.on||!SYNC.be.consList)return;const rows=await SYNC.be.consList(SYNC.space.id);
+    for(const row of rows||[]){let cid=null,rec=null;S.children.forEach((c,id)=>{const r=(c.consents||[]).find(x=>x.token===row.token);if(r){cid=id;rec=r}});
+      if(!rec)continue;if(rec.status==="signe"){try{await SYNC.be.consDelete(row.token)}catch(e){}continue}
+      let txt,data;try{const key=await crypto.subtle.importKey("raw",b64u.from(rec.k),"AES-GCM",false,["decrypt"]);txt=dec.decode(await crypto.subtle.decrypt({name:"AES-GCM",iv:unb64(row.payload_iv)},key,unb64(row.payload)));data=JSON.parse(txt)}catch(e){console.warn("consentement illisible",e);continue}
+      const h=[...new Uint8Array(await crypto.subtle.digest("SHA-256",enc.encode(txt)))].map(x=>x.toString(16).padStart(2,"0")).join("");
+      const E=data.enfant||{};
+      mutChild(cid,x=>{const r=(x.consents||[]).find(z=>z.token===row.token);if(!r)return;Object.assign(r,{status:"signe",signedAt:row.used_at||data.at,data,hash:h});
+        if(!x.dob&&/^\d{4}-\d{2}-\d{2}$/.test(E.ddn||""))x.dob=E.ddn;const lg=[E.l1,E.l2,E.l3].filter(v=>String(v||"").trim()).join(", ");if(!x.langues&&lg)x.langues=lg;
+        x.infos=Object.assign({},x.infos||{},{nomComplet:E.nom||"",adresse:E.adresse||"",tel:E.tel||"",courriel:E.courriel||"",allergies:E.allergies?("Oui : "+(E.allergies_detail||"")):"Non",poids:E.poids||"",maj:todayISO(),src:"consentement"})});
+      try{await SYNC.be.consDelete(row.token)}catch(e){}toast("Consentement reçu pour "+(S.children.get(cid)||{}).name)}},
+  docHTML(cid,rid){const c=S.children.get(cid);const r=(c.consents||[]).find(x=>x.id===rid);if(!r||!r.data)return "";const D=r.data,E=D.enfant||{},T=D.textes||{};const ech=CONS.echeance(r);
+    const sec={};(T.items||[]).forEach(it=>{(sec[it.s]=sec[it.s]||[]).push(it)});
+    return `<div class="oxdoc cons"><div style="display:flex;justify-content:space-between;align-items:center"><img src="assets/logo-coclinique.png" alt="" style="height:54px"><img src="assets/logo-caal.png" alt="" style="height:60px"></div>
+      <h2 style="text-align:center;margin:8px 0 2px">Formulaire de consentement</h2><p class="muted small" style="text-align:center;margin:0">${esc(c.name)} · ${esc((S.groups.get(c.groupId)||{}).name||"")}</p>
+      <div class="oxk"><h3>Titulaire(s) de l'autorité parentale</h3>${(D.parents||[]).map(p=>`<p class="oxs">${esc(p.nom)}, en qualité de ${esc(p.qualite)}</p>`).join("")}</div>
+      <div class="oxk"><h3>Le projet</h3><p class="oxs">${esc(T.desc||"")}</p></div>
+      <div class="oxk"><h3>L'enfant</h3><p class="oxs"><b>Prénom et nom :</b> ${esc(E.nom)} · <b>Date de naissance :</b> ${esc(E.ddn)}</p><p class="oxs"><b>Adresse :</b> ${esc(E.adresse)}</p><p class="oxs"><b>Téléphone :</b> ${esc(E.tel)}${E.courriel?` · <b>Courriel :</b> ${esc(E.courriel)}`:""}</p>
+        <p class="oxs"><b>Allergies :</b> ${E.allergies?"Oui, "+esc(E.allergies_detail):"Non"} · <b>Poids :</b> ${esc(E.poids)}</p><p class="oxs"><b>Langues :</b> ${esc([E.l1,E.l2,E.l3].filter(Boolean).join(", "))}</p></div>
+      ${Object.entries(sec).map(([s,L])=>`<div class="oxk"><h3>${esc(s)}</h3>${s==="Prise de risque saine"&&T.risque?`<p class="oxs small">${esc(T.risque)}</p>`:""}${L.map(it=>`<p class="oxs"><b style="display:inline-block;min-width:2.6em;color:${D.rep[it.k]?"#3D6A4A":"#8A6D5A"}">${D.rep[it.k]?"Oui":"Non"}</b> ${esc(it.t)}${it.l?` <span class="small">${esc(it.l.join(", "))}</span>`:""}</p>`).join("")}</div>`).join("")}
+      <div class="oxk"><h3>Droits</h3><p class="oxs small">${esc(T.droits||"")}</p></div>
+      <div class="oxk"><h3>Signature${(D.parents||[]).length>1?"s":""}</h3><div style="display:flex;gap:16px;flex-wrap:wrap">${(D.parents||[]).map(p=>`<figure style="margin:0"><img src="${p.sig}" alt="Signature" style="height:90px;max-width:280px;border-bottom:1px solid #999"><figcaption class="small">${esc(p.nom)}</figcaption></figure>`).join("")}</div>
+        <p class="oxs small">Signé électroniquement le ${new Date(r.signedAt).toLocaleString("fr-CA",{dateStyle:"long",timeStyle:"short"})}, par lien personnel envoyé le ${CONS.fd(r.sentAt)}${r.by?" par "+esc(r.by):""}.</p>
+        ${r.counter?`<p class="oxs small">Reçu et contresigné par ${esc(r.counter.by||"l'intervenante")} le ${CONS.fd(r.counter.at)}.</p>`:""}
+        ${ech?`<p class="oxs small">Autorisations de partage de renseignements valides jusqu'au ${CONS.fd(ech)}.</p>`:""}
+        <p class="oxs small muted">Empreinte numérique (SHA-256) : <span style="word-break:break-all">${r.hash}</span></p></div></div>`},
+  view(cid,rid){const c=S.children.get(cid);const r=(c.consents||[]).find(x=>x.id===rid);if(!r)return;
+    openSheet(`<h3>Consentement · ${esc(c.name)}</h3><p class="muted small" style="margin:0">Document verrouillé : il ne peut pas être modifié. Pour un changement, envoyez un nouveau formulaire.</p>
+      <div class="row-actions"><button class="btn primary" id="cvPrint">Imprimer / PDF</button>${r.counter?"":`<button class="btn" id="cvSign">Contresigner (réception)</button>`}<button class="btn" id="cvClose">Fermer</button></div>${CONS.docHTML(cid,rid)}`,s=>{
+        s.querySelector("#cvClose").onclick=closeSheet;s.querySelector("#cvPrint").onclick=()=>printHTML(CONS.docHTML(cid,rid));
+        const cs=s.querySelector("#cvSign");if(cs)cs.onclick=()=>{mutChild(cid,x=>{const z=(x.consents||[]).find(q=>q.id===rid);if(z&&!z.counter)z.counter={by:getMe()||"",at:new Date().toISOString()}});CONS.view(cid,rid);toast("Contresigné")}})}
+};
+document.addEventListener("click",e=>{const b=e.target.closest("[data-cons]");if(!b)return;e.preventDefault();const a=b.dataset.cons;
+  if(a==="send")SYNC.act(()=>CONS.send(b.dataset.id));else if(a==="share")CONS.share(b.dataset.id,b.dataset.r);else if(a==="view")CONS.view(b.dataset.id,b.dataset.r)});
 
 document.addEventListener("click",e=>{const t=e.target.closest("[data-sync]");if(!t)return;e.preventDefault();SYNC.open()});
 (async function boot(){for(let i=0;i<200&&!(LOCAL.idb&&S.ready);i++)await sleep(100);if(LOCAL.idb)SYNC.start()})();
