@@ -849,7 +849,7 @@ OBSERVATIONS
 ${all.map((n,i)=>`[N${i+1}] ${n.date} : ${noteTxt(c,n)}`).join("\n")}
 
 Réponds seulement en JSON : {"classement":{"N1":"code"},"resumes":{"code":"texte"}}`;
-  const r=await sample.json(prompt,{modelTier:"default"});if(!r||typeof r!=="object")throw {code:"format"};
+  const r=await sample.json(prompt,{modelTier:"default",max:16000});if(!r||typeof r!=="object")throw {code:"format"};
   const cls={};all.forEach((n,i)=>{const k=r.classement&&r.classement["N"+(i+1)];if(OCC8L[k])cls[n.id]=k});
   const res={};const now=todayISO();Object.entries(r.resumes||{}).forEach(([k,t])=>{if(OCC8L[k]&&String(t||"").trim())res[k]={t:String(t).trim(),maj:now,fmt}});
   mutChild(cid,x=>{x.occRes={cls,res,ids:all.map(n=>n.id),at:new Date().toISOString()}});return true}
@@ -881,7 +881,7 @@ function objAllHTML(gid,O,only,title,live){const g=S.groups.get(gid);return `<di
   ${O.pres||O.notes||O.ana?"<h4>Objectifs</h4>":""}${k.objs.length?k.objs.map(o=>`<div class="oxo"><img class="oximg" src="${ICW(o.img)}" alt=""><b>${esc(o.t)}</b>${o.done?' <span class="tag">atteint</span>':""}${o.l?`<div>${esc(o.l)}</div>`:""}${o.strat?`<div class="ostrat">Stratégie : ${esc(o.strat)}</div>`:""}${o.gen&&o.gen.c?`<div class="oxs"><b>En classe :</b> ${esc(o.gen.c)}</div>`:""}${o.gen&&o.gen.m?`<div class="oxs"><b>À la maison :</b> ${esc(o.gen.m)}</div>`:""}<div class="oxs">${esc(o.suivi)}</div>${o.ctx?`<div class="oxs">${esc(o.ctx)}</div>`:""}${o.links.length?`<ul class="oxn">${o.links.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`:""}</div>`).join(""):`<p class="muted small">Aucun objectif pour l'instant.</p>`}
   ${[["pistes","Pistes"],["expl","À explorer"]].filter(([f])=>k[f].length).map(([f,t])=>`<div class="oxx"><b>${t}</b><ul>${k[f].map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>`).join("")}</div>`).join("")}</div>`}
 function objAllSheet(gid,mode,only){mode=mode||"obj";const title=mode==="eval"?"Évaluation et plan d'intervention":"Objectifs des enfants";let O=oxOpts(mode);const draw=s=>{s.querySelector("#oxv").innerHTML=objAllHTML(gid,O,only,title,true);
-    s.querySelectorAll("[data-occsum]").forEach(b=>b.onclick=async()=>{b.disabled=true;b.innerHTML='<span class="spinner"></span> Résumé en cours…';try{await occSummarize(b.dataset.occsum);toast("Résumés prêts : relisez-les")}catch(e){toast(e&&e.code==="rate_limited"?"Trop de demandes. Réessayez dans une minute.":"Le résumé n'a pas fonctionné.")}draw(s)});
+    s.querySelectorAll("[data-occsum]").forEach(b=>b.onclick=async()=>{b.disabled=true;b.innerHTML='<span class="spinner"></span> Résumé en cours…';try{await occSummarize(b.dataset.occsum);toast("Résumés prêts : relisez-les")}catch(e){toast(e&&e.code==="rate_limited"?"Trop de demandes. Réessayez dans une minute.":"Le résumé n'a pas fonctionné"+(e&&e.message?" : "+e.message:"."))}draw(s)});
     s.querySelectorAll("[data-occed]").forEach(b=>b.onclick=()=>{const [cid,k]=b.dataset.occed.split("|");const c=S.children.get(cid);const t=(((c||{}).occRes||{}).res||{})[k];const box=s.querySelector(`#occr-${cid}-${k}`);if(!box)return;
       box.innerHTML=`<textarea class="field" style="min-height:140px">${esc(t?t.t:"")}</textarea><div class="row-actions"><button class="btn small primary">Enregistrer</button></div>`;b.remove();const ta=box.querySelector("textarea");ta.focus();
       box.querySelector("button").onclick=()=>{occEdit(cid,k,ta.value.trim());draw(s);toast("Résumé enregistré")}})};
@@ -891,7 +891,7 @@ function objAllSheet(gid,mode,only){mode=mode||"obj";const title=mode==="eval"?"
   <div class="row-actions"><button class="btn primary" id="oxCopy">Copier</button><button class="btn" id="oxPrint">Imprimer / PDF</button><button class="btn" id="oxClose">Fermer</button></div><div id="oxv"></div>`,s=>{draw(s);
     const fm=s.querySelector("#oxFmt");if(fm)fm.onchange=()=>{try{localStorage.setItem("carnet-occfmt",fm.value)}catch(e){}toast("Les prochains résumés seront en "+(fm.value==="puces"?"puces":"paragraphe"))};
     const al=s.querySelector("#oxAllSum");if(al)al.onclick=async()=>{const L=childrenOf(gid).filter(([,c])=>occNotes(c).length&&(!c.occRes||occNewCount(c)));if(!L.length){toast("Tous les résumés sont à jour.");return}al.disabled=true;let i=0;
-      for(const [cid] of L){i++;al.innerHTML=`<span class="spinner"></span> ${i} sur ${L.length}…`;try{await occSummarize(cid)}catch(e){toast("Le résumé n'a pas fonctionné pour "+(S.children.get(cid)||{}).name)}if(!document.body.contains(al))return}
+      for(const [cid] of L){i++;al.innerHTML=`<span class="spinner"></span> ${i} sur ${L.length}…`;try{await occSummarize(cid)}catch(e){toast("Le résumé n'a pas fonctionné pour "+(S.children.get(cid)||{}).name+(e&&e.message?" : "+e.message:""))}if(!document.body.contains(al))return}
       al.disabled=false;al.textContent="✨ Résumer tous les enfants";draw(s);toast("Résumés prêts : relisez-les")};
     const sp=s.querySelector("#oxSimple");if(sp)sp.onclick=async()=>{sp.disabled=true;const old=sp.innerHTML;sp.innerHTML='<span class="spinner"></span> Rédaction…';
       try{const r=await sample(`Réécris ce document pour l'école et les parents, en mots simples et chaleureux mais justes : phrases courtes, sans jargon clinique (explique au besoin), même structure et mêmes titres, même contenu (forces, défis, ce qui aide, objectifs et généralisation). Garde le ton équilibré : ni lunettes roses, ni lunettes noires. Pas de diagnostic. Réponds seulement avec le document réécrit, en texte simple.\n\n${objAllText(gid,O,only,title)}`,{modelTier:"default"});const t=String(r&&r.text||"").trim();if(!t)throw 0;
@@ -1270,7 +1270,7 @@ async function iaRun(gid){if(!sample){toast("L'IA n'est pas activée.");return}
   openSheet(`<h3>Tout ranger et corriger</h3><p id="iaProg"><span class="spinner" style="border-color:rgba(0,0,0,.2);border-top-color:var(--forest)"></span> ${all.length} note${all.length>1?"s":""} en lecture…</p><p class="muted small">Les prénoms sont remplacés par des codes avant l'envoi. Rien n'est enregistré avant votre relecture.</p><div class="row-actions"><button class="btn" id="iaStop">Annuler</button></div>`,s=>{s.querySelector("#iaStop").onclick=()=>{stop=true;closeSheet()}});
   const res={};
   for(let i=0;i<chunks.length;i++){if(stop)return;const p=document.getElementById("iaProg");if(p&&chunks.length>1)p.lastChild.textContent=` Lot ${i+1} sur ${chunks.length} (${all.length} notes)…`;
-    try{Object.assign(res,await sample.json(iaPrompt(gid,chunks[i]),{modelTier:"default"})||{})}
+    try{Object.assign(res,await sample.json(iaPrompt(gid,chunks[i]),{modelTier:"default",max:16000})||{})}
     catch(e){if(stop)return;closeSheet();toast(e&&e.code==="rate_limited"?"Trop de demandes. Réessayez dans une minute.":"La lecture n'a pas fonctionné"+(e&&e.message?" : "+e.message:"."));if(!Object.keys(res).length)return;break}}
   if(!stop)iaReview(gid,all,res)}
 function iaKid(gid,name){const n=norm(String(name||""));if(!n)return "";const L=childrenOf(gid);const hit=L.find(([,c])=>kidNames(c).some(k=>norm(k)===n))||L.find(([,c])=>kidNames(c).some(k=>norm(k).startsWith(n)||n.startsWith(norm(k))));return hit?hit[0]:""}

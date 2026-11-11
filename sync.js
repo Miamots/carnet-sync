@@ -41,8 +41,8 @@ function supaBackend(){
     async pull(space,since){const out=[];for(let i=0;;i+=500){const d=ok(await sb.from("docs").select("id,data,iv,deleted,updated_at").eq("space_id",space).gt("updated_at",since).not("id","like","photos/%").order("updated_at").range(i,i+499));out.push(...d);if(d.length<500)break}return out},
     async upsert(space,rows){ok(await sb.from("docs").upsert(rows.map(r=>({space_id:space,id:r.id,data:r.data,iv:r.iv,deleted:!!r.deleted})),{onConflict:"space_id,id"}))},
     async getOne(space,id){return ok(await sb.from("docs").select("id,data,iv,deleted,updated_at").eq("space_id",space).eq("id",id).maybeSingle())},
-    async ai(prompt,json){const {data}=await sb.auth.getSession();const tok=data&&data.session&&data.session.access_token;if(!tok)throw new Error("Connexion requise");
-      const r=await fetch(CFG.url+"/functions/v1/ia",{method:"POST",headers:{"Authorization":"Bearer "+tok,"apikey":CFG.key,"Content-Type":"application/json"},body:JSON.stringify({prompt,json:!!json})});
+    async ai(prompt,json,max){const {data}=await sb.auth.getSession();const tok=data&&data.session&&data.session.access_token;if(!tok)throw new Error("Connexion requise");
+      const r=await fetch(CFG.url+"/functions/v1/ia",{method:"POST",headers:{"Authorization":"Bearer "+tok,"apikey":CFG.key,"Content-Type":"application/json"},body:JSON.stringify({prompt,json:!!json,max:max||undefined})});
       const j=await r.json().catch(()=>({}));if(!r.ok){const e=new Error(j.error||("Erreur "+r.status));if(r.status===429)e.code="rate_limited";if(r.status===404)e.message="La fonction « ia » n'est pas encore installée dans Supabase.";throw e}return j.text||""},
     subscribe(space,cb){const ch=sb.channel("docs-"+space).on("postgres_changes",{event:"*",schema:"public",table:"docs",filter:"space_id=eq."+space},()=>cb()).subscribe();return()=>sb.removeChannel(ch)}
   }}
@@ -76,10 +76,12 @@ const IA={rules(){const d=LOCAL.cache.get("config/ia");return d&&typeof d.regles
     return{rx:pairs.filter(p=>p[0].trim().length>1).map(([n,t])=>[new RegExp("(?<![\\p{L}\\p{N}_])"+[...strip(n.trim())].map(ch=>{const l=ch.toLowerCase();return ACC[l]||ch.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")}).join("")+"(?![\\p{L}\\p{N}_])","giu"),t]),back}},
   mask(text){const T=IA.table();let s=String(text).normalize("NFC");T.rx.forEach(([r,t])=>{s=s.replace(r,t)});return{text:s,back:T.back}},
   unmask(s,back){return String(s).replace(/(Enfant|Adulte)_([A-Z]{1,2})(?![A-Za-z])/g,m=>back[m]||m)},
-  async ask(prompt,json){const r=IA.rules().trim();if(r)prompt="CONSIGNES DE RÉDACTION DE L'ERGOTHÉRAPEUTE (à suivre pour tout texte que tu écris ; dans le carnet, chaque note reste une entrée séparée et tu respectes le format de réponse demandé plus bas) :\n"+r+"\n\n---\n\n"+prompt;const m=IA.mask(prompt);SYNC.lastSent=m.text;const t=await SYNC.be.ai(m.text,json);SYNC.lastGot=t;return IA.unmask(t,m.back)},
+  async ask(prompt,json,max){const r=IA.rules().trim();if(r)prompt="CONSIGNES DE RÉDACTION DE L'ERGOTHÉRAPEUTE (à suivre pour tout texte que tu écris ; dans le carnet, chaque note reste une entrée séparée et tu respectes le format de réponse demandé plus bas) :\n"+r+"\n\n---\n\n"+prompt;const m=IA.mask(prompt);SYNC.lastSent=m.text;SYNC.lastErr="";let t;try{t=await SYNC.be.ai(m.text,json,max)}catch(e){SYNC.lastErr=String(e&&e.message||e);throw e}SYNC.lastGot=t;return IA.unmask(t,m.back)},
   parse(t){t=String(t).replace(/```(?:json)?/g,"");const i=t.search(/[\[{]/);const j=Math.max(t.lastIndexOf("}"),t.lastIndexOf("]"));if(i<0||j<i)throw {code:"format"};try{return JSON.parse(t.slice(i,j+1))}catch(e){throw {code:"format"}}},
   sampler(){const f=async(prompt,opts)=>{const t=await IA.ask(prompt,false);try{opts&&opts.onText&&opts.onText({text:t})}catch(e){}return{text:t}};
-    f.json=async prompt=>IA.parse(await IA.ask(prompt,true));return f}};
+    f.json=async(prompt,opts)=>{const mx=opts&&opts.max;let t=await IA.ask(prompt,true,mx);try{return IA.parse(t)}catch(e){}
+      t=await IA.ask(prompt+"\n\nIMPORTANT : ta réponse doit être du JSON strictement valide et complet (échappe les guillemets droits à l'intérieur des textes, aucun texte autour).",true,mx);
+      try{return IA.parse(t)}catch(e){SYNC.lastErr="Réponse de l'IA illisible (JSON incomplet ou mal formé).";throw Object.assign(new Error(SYNC.lastErr),{code:"format"})}};return f}};
 window.SYNC_IA=IA;
 
 /* ---------- Moteur ---------- */
@@ -243,7 +245,7 @@ const SYNC=window.SYNC={on:false,status:"off",msg:"",user:null,space:null,key:nu
         q("#syRulesOk").onclick=()=>{IA.setRules(q("#syRules").value);toast("Consignes enregistrées")};
         q("#syRulesDef").onclick=()=>{q("#syRules").value=IA_DEF;IA.setRules(IA_DEF);toast("Consignes par défaut remises")};
         q("#syIA").onchange=e=>{IA.set(e.target.checked);toast(e.target.checked?"IA activée":"IA désactivée")};
-        q("#sySent")&&(q("#sySent").onclick=()=>openSheet(`<h3>Dernier envoi à l'IA</h3><p class="muted small" style="margin:0">Exactement ce qui a quitté l'appareil :</p><pre style="white-space:pre-wrap;font-size:.8rem;max-height:55vh;overflow:auto;background:#fff;padding:8px;border-radius:8px">${esc(SYNC.lastSent)}</pre><div class="row-actions"><button class="btn" id="syBack">Retour</button></div>`,s2=>s2.querySelector("#syBack").onclick=()=>SYNC.open()));
+        q("#sySent")&&(q("#sySent").onclick=()=>openSheet(`<h3>Dernier envoi à l'IA</h3>${SYNC.lastErr?`<div class="notice err small"><b>Erreur :</b> ${esc(SYNC.lastErr)}</div>`:""}<p class="muted small" style="margin:0">Exactement ce qui a quitté l'appareil :</p><pre style="white-space:pre-wrap;font-size:.8rem;max-height:40vh;overflow:auto;background:#fff;padding:8px;border-radius:8px">${esc(SYNC.lastSent)}</pre>${SYNC.lastGot?`<p class="muted small" style="margin:6px 0 0">Réponse reçue (avec les codes) :</p><pre style="white-space:pre-wrap;font-size:.8rem;max-height:30vh;overflow:auto;background:#fff;padding:8px;border-radius:8px">${esc(SYNC.lastGot)}</pre>`:""}<div class="row-actions"><button class="btn" id="syBack">Retour</button></div>`,s2=>s2.querySelector("#syBack").onclick=()=>SYNC.open()));
         q("#syLock").onclick=()=>SYNC.act(async()=>{SYNC.stop();await SYNC.keyPut(null);SYNC.key=null;SYNC.setStatus("locked");closeSheet();render()});
         q("#syOut").onclick=()=>SYNC.signOut()})})},
 
