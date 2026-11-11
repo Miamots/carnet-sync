@@ -839,20 +839,27 @@ function occData(c){const R=c.occRes||{};const ids=new Set(R.ids||[]);const all=
   all.forEach(n=>{(by[occOfNote(c,n)]=by[occOfNote(c,n)]||[]).push(n)});
   return OCC8.map(([k,l])=>{const L=by[k]||[];const res=(R.res||{})[k]||null;return {k,l,notes:L.map(n=>{const o=n.cobj&&(c.objectifs||[]).find(x=>x.id===n.cobj);return {id:n.id,d:n.date,t:noteTxt(c,n),o:o?objShort(o):""}}),res,newN:L.filter(n=>!ids.has(n.id)).length}}).filter(x=>x.notes.length||(x.res&&x.res.t))}
 function occNewCount(c){const ids=new Set((c.occRes||{}).ids||[]);return occNotes(c).filter(n=>!ids.has(n.id)).length}
-async function occSummarize(cid){const c=S.children.get(cid);if(!c||!sample)return false;const all=occNotes(c);if(!all.length){toast("Aucune observation pour "+c.name+".");return false}
-  const fmt=occFmt();const objs=childObjs(c);
-  const prompt=`Voici les observations de ${c.name}${c.dob?" ("+ageAt(c.dob)+")":""}, en classe nature (évaluation en ergothérapie et éducation spécialisée).
-1. Classe chaque observation dans UNE occupation (code) : ${OCC8.map(([k,l])=>k+" = "+l).join(" ; ")}. Les difficultés de régulation émotionnelle (colère, pleurs, désorganisation, retour au calme) vont dans « regul », même si elles surviennent pendant une autre activité ; un moment de transport ou de transition sans enjeu émotionnel va dans « trans ». Utilise « autre » seulement si rien ne convient.
-2. Pour chaque occupation qui a au moins une observation, rédige un résumé ${fmt==="puces"?"en trois lignes qui commencent par « Forces : », « Obstacles : » et « Ce qui aide : »":"en un paragraphe"}, de la longueur nécessaire pour garder l'essentiel clinique : ce que l'enfant fait, ses forces et initiatives, ce qui fait obstacle (déclencheurs), ce qui l'aide (stratégies, adaptations, interventions), et l'évolution dans le temps avec les dates (ex. « le 6 octobre… ; le 3 novembre… »). Garde les mots importants de l'enfant entre guillemets. N'invente rien, ne perds pas d'information clinique utile à l'analyse et au choix des objectifs.
-${objs.length?"Objectifs actuels (contexte seulement) : "+objs.map(o=>objShort(o)).join(" ; ")+"\n":""}
+async function occPool(items,n,fn){const out=new Array(items.length);let i=0;await Promise.all(Array.from({length:Math.min(n,items.length)},async()=>{while(i<items.length){const k=i++;try{out[k]={ok:true,v:await fn(items[k],k)}}catch(e){out[k]={ok:false,e}}}}));return out}
+async function occSummarize(cid,prog){const c=S.children.get(cid);if(!c||!sample)return false;const all=occNotes(c);if(!all.length){toast("Aucune observation pour "+c.name+".");return false}
+  const fmt=occFmt();const objs=childObjs(c);const P=t=>{try{prog&&prog(t)}catch(e){}};
+  P("Classement…");
+  const r=await sample.json(`Voici les observations de ${c.name}, en classe nature (évaluation en ergothérapie et éducation spécialisée). Classe chaque observation dans UNE occupation (code) : ${OCC8.map(([k,l])=>k+" = "+l).join(" ; ")}. Les difficultés de régulation émotionnelle (colère, pleurs, désorganisation, retour au calme) vont dans « regul », même si elles surviennent pendant une autre activité ; un moment de transport ou de transition sans enjeu émotionnel va dans « trans ». Utilise « autre » seulement si rien ne convient.
+
 OBSERVATIONS
 ${all.map((n,i)=>`[N${i+1}] ${n.date} : ${noteTxt(c,n)}`).join("\n")}
 
-Réponds seulement en JSON : {"classement":{"N1":"code"},"resumes":{"code":"texte"}}`;
-  const r=await sample.json(prompt,{modelTier:"default",max:16000});if(!r||typeof r!=="object")throw {code:"format"};
-  const cls={};all.forEach((n,i)=>{const k=r.classement&&r.classement["N"+(i+1)];if(OCC8L[k])cls[n.id]=k});
-  const res={};const now=todayISO();Object.entries(r.resumes||{}).forEach(([k,t])=>{if(OCC8L[k]&&String(t||"").trim())res[k]={t:String(t).trim(),maj:now,fmt}});
-  mutChild(cid,x=>{x.occRes={cls,res,ids:all.map(n=>n.id),at:new Date().toISOString()}});return true}
+Réponds seulement en JSON, sans rien d'autre : {"N1":"code","N2":"code"}`,{modelTier:"default",max:2000});
+  const R=r&&r.classement?r.classement:r||{};const cls={};all.forEach((n,i)=>{const k=R["N"+(i+1)];cls[n.id]=OCC8L[k]?k:occGuess(n)});
+  const groups=OCC8.map(([k,l])=>({k,l,notes:all.filter(n=>cls[n.id]===k)})).filter(g=>g.notes.length);
+  let done=0;P(`Résumés 0 sur ${groups.length}…`);
+  const res0=await occPool(groups,3,async g=>{const t=await sample(`Rédige le résumé de l'occupation « ${g.l} » pour ${c.name}${c.dob?" ("+ageAt(c.dob)+")":""}, en classe nature, à partir des observations ci-dessous seulement. ${fmt==="puces"?"Écris trois lignes qui commencent par « Forces : », « Obstacles : » et « Ce qui aide : ».":"Écris un seul paragraphe."} Prends la longueur nécessaire pour garder l'essentiel clinique : ce que l'enfant fait, ses forces et initiatives, ce qui fait obstacle (déclencheurs), ce qui l'aide (stratégies, adaptations, interventions), et l'évolution dans le temps avec les dates (ex. « le 6 octobre… ; le 3 novembre… »). Garde les mots importants de l'enfant entre guillemets. N'invente rien. Pas de titre, pas de liste à puces${fmt==="puces"?" autres que les trois lignes":""}. Réponds seulement avec le résumé.
+${objs.length?"Objectifs actuels (contexte seulement) : "+objs.map(o=>objShort(o)).join(" ; ")+"\n":""}
+OBSERVATIONS
+${g.notes.map(n=>`- ${n.date} : ${noteTxt(c,n)}`).join("\n")}`,{modelTier:"default"});done++;P(`Résumés ${done} sur ${groups.length}…`);return String(t&&t.text||"").trim()});
+  const res={};const now=todayISO();let fail=0;groups.forEach((g,i)=>{const x=res0[i];if(x.ok&&x.v)res[g.k]={t:x.v.replace(/^#+\s.*\n/,"").trim(),maj:now,fmt};else fail++});
+  if(!Object.keys(res).length)throw (res0.find(x=>!x.ok)||{}).e||new Error("aucun résumé reçu");
+  mutChild(cid,x=>{const old=(x.occRes||{}).res||{};x.occRes={cls,res:Object.assign({},fail?old:{},res),ids:fail?((x.occRes||{}).ids||[]):all.map(n=>n.id),at:new Date().toISOString()}});
+  if(fail)toast(`${fail} résumé${fail>1?"s":""} sur ${groups.length} n'${fail>1?"ont":"a"} pas fonctionné : réessayez « Mettre à jour ».`);return true}
 function occEdit(cid,k,t){mutChild(cid,x=>{x.occRes=x.occRes||{cls:{},res:{},ids:[]};x.occRes.res=x.occRes.res||{};const r=x.occRes.res[k]||{};x.occRes.res[k]=Object.assign(r,{t,maj:todayISO(),edit:1})})}
 function occResHTML(t){const L=String(t).split(/\n+/).filter(Boolean);return L.length>1?`<ul class="occul">${L.map(x=>`<li>${esc(x.replace(/^[-•]\s*/,""))}</li>`).join("")}</ul>`:`<p class="occp">${esc(t)}</p>`}
 function objAllData(gid,O,only){const g=S.groups.get(gid);const kids=[...S.children.entries()].filter(([cid,c])=>c.groupId===gid&&(!only||cid===only)).sort((x,y)=>x[1].name.localeCompare(y[1].name,"fr",{sensitivity:"base"}));const F=facils();
@@ -881,7 +888,7 @@ function objAllHTML(gid,O,only,title,live){const g=S.groups.get(gid);return `<di
   ${O.pres||O.notes||O.ana?"<h4>Objectifs</h4>":""}${k.objs.length?k.objs.map(o=>`<div class="oxo"><img class="oximg" src="${ICW(o.img)}" alt=""><b>${esc(o.t)}</b>${o.done?' <span class="tag">atteint</span>':""}${o.l?`<div>${esc(o.l)}</div>`:""}${o.strat?`<div class="ostrat">Stratégie : ${esc(o.strat)}</div>`:""}${o.gen&&o.gen.c?`<div class="oxs"><b>En classe :</b> ${esc(o.gen.c)}</div>`:""}${o.gen&&o.gen.m?`<div class="oxs"><b>À la maison :</b> ${esc(o.gen.m)}</div>`:""}<div class="oxs">${esc(o.suivi)}</div>${o.ctx?`<div class="oxs">${esc(o.ctx)}</div>`:""}${o.links.length?`<ul class="oxn">${o.links.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`:""}</div>`).join(""):`<p class="muted small">Aucun objectif pour l'instant.</p>`}
   ${[["pistes","Pistes"],["expl","À explorer"]].filter(([f])=>k[f].length).map(([f,t])=>`<div class="oxx"><b>${t}</b><ul>${k[f].map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>`).join("")}</div>`).join("")}</div>`}
 function objAllSheet(gid,mode,only){mode=mode||"obj";const title=mode==="eval"?"Évaluation et plan d'intervention":"Objectifs des enfants";let O=oxOpts(mode);const draw=s=>{s.querySelector("#oxv").innerHTML=objAllHTML(gid,O,only,title,true);
-    s.querySelectorAll("[data-occsum]").forEach(b=>b.onclick=async()=>{b.disabled=true;b.innerHTML='<span class="spinner"></span> Résumé en cours…';try{await occSummarize(b.dataset.occsum);toast("Résumés prêts : relisez-les")}catch(e){toast(e&&e.code==="rate_limited"?"Trop de demandes. Réessayez dans une minute.":"Le résumé n'a pas fonctionné"+(e&&e.message?" : "+e.message:"."))}draw(s)});
+    s.querySelectorAll("[data-occsum]").forEach(b=>b.onclick=async()=>{b.disabled=true;b.innerHTML='<span class="spinner"></span> Résumé en cours…';try{await occSummarize(b.dataset.occsum,t=>{b.innerHTML='<span class="spinner"></span> '+esc(t)});toast("Résumés prêts : relisez-les")}catch(e){toast(e&&e.code==="rate_limited"?"Trop de demandes. Réessayez dans une minute.":"Le résumé n'a pas fonctionné"+(e&&e.message?" : "+e.message:"."))}draw(s)});
     s.querySelectorAll("[data-occed]").forEach(b=>b.onclick=()=>{const [cid,k]=b.dataset.occed.split("|");const c=S.children.get(cid);const t=(((c||{}).occRes||{}).res||{})[k];const box=s.querySelector(`#occr-${cid}-${k}`);if(!box)return;
       box.innerHTML=`<textarea class="field" style="min-height:140px">${esc(t?t.t:"")}</textarea><div class="row-actions"><button class="btn small primary">Enregistrer</button></div>`;b.remove();const ta=box.querySelector("textarea");ta.focus();
       box.querySelector("button").onclick=()=>{occEdit(cid,k,ta.value.trim());draw(s);toast("Résumé enregistré")}})};
@@ -891,7 +898,7 @@ function objAllSheet(gid,mode,only){mode=mode||"obj";const title=mode==="eval"?"
   <div class="row-actions"><button class="btn primary" id="oxCopy">Copier</button><button class="btn" id="oxPrint">Imprimer / PDF</button><button class="btn" id="oxClose">Fermer</button></div><div id="oxv"></div>`,s=>{draw(s);
     const fm=s.querySelector("#oxFmt");if(fm)fm.onchange=()=>{try{localStorage.setItem("carnet-occfmt",fm.value)}catch(e){}toast("Les prochains résumés seront en "+(fm.value==="puces"?"puces":"paragraphe"))};
     const al=s.querySelector("#oxAllSum");if(al)al.onclick=async()=>{const L=childrenOf(gid).filter(([,c])=>occNotes(c).length&&(!c.occRes||occNewCount(c)));if(!L.length){toast("Tous les résumés sont à jour.");return}al.disabled=true;let i=0;
-      for(const [cid] of L){i++;al.innerHTML=`<span class="spinner"></span> ${i} sur ${L.length}…`;try{await occSummarize(cid)}catch(e){toast("Le résumé n'a pas fonctionné pour "+(S.children.get(cid)||{}).name+(e&&e.message?" : "+e.message:""))}if(!document.body.contains(al))return}
+      for(const [cid] of L){i++;al.innerHTML=`<span class="spinner"></span> ${i} sur ${L.length}…`;try{await occSummarize(cid,t=>{al.innerHTML=`<span class="spinner"></span> ${i} sur ${L.length} · ${esc(t)}`})}catch(e){toast("Le résumé n'a pas fonctionné pour "+(S.children.get(cid)||{}).name+(e&&e.message?" : "+e.message:""))}if(!document.body.contains(al))return}
       al.disabled=false;al.textContent="✨ Résumer tous les enfants";draw(s);toast("Résumés prêts : relisez-les")};
     const sp=s.querySelector("#oxSimple");if(sp)sp.onclick=async()=>{sp.disabled=true;const old=sp.innerHTML;sp.innerHTML='<span class="spinner"></span> Rédaction…';
       try{const r=await sample(`Réécris ce document pour l'école et les parents, en mots simples et chaleureux mais justes : phrases courtes, sans jargon clinique (explique au besoin), même structure et mêmes titres, même contenu (forces, défis, ce qui aide, objectifs et généralisation). Garde le ton équilibré : ni lunettes roses, ni lunettes noires. Pas de diagnostic. Réponds seulement avec le document réécrit, en texte simple.\n\n${objAllText(gid,O,only,title)}`,{modelTier:"default"});const t=String(r&&r.text||"").trim();if(!t)throw 0;
@@ -1265,14 +1272,16 @@ Réponds seulement en JSON : {"N1":{"texte":"…","dest":"code"},"F2":{"texte":"
 async function iaRun(gid){if(!sample){toast("L'IA n'est pas activée.");return}
   const all=iaPending(gid);if(!all.length){toast("Tout est déjà rangé et corrigé.");return}
   all.forEach((it,i)=>it.n=i+1);
-  const chunks=[];let cur=[],len=0;all.forEach(it=>{if(cur.length>=30||len>7000){chunks.push(cur);cur=[];len=0}cur.push(it);len+=it.text.length});if(cur.length)chunks.push(cur);
+  const chunks=[];let cur=[],len=0;all.forEach(it=>{if(cur.length>=12||len>3500){chunks.push(cur);cur=[];len=0}cur.push(it);len+=it.text.length});if(cur.length)chunks.push(cur);
   let stop=false;
   openSheet(`<h3>Tout ranger et corriger</h3><p id="iaProg"><span class="spinner" style="border-color:rgba(0,0,0,.2);border-top-color:var(--forest)"></span> ${all.length} note${all.length>1?"s":""} en lecture…</p><p class="muted small">Les prénoms sont remplacés par des codes avant l'envoi. Rien n'est enregistré avant votre relecture.</p><div class="row-actions"><button class="btn" id="iaStop">Annuler</button></div>`,s=>{s.querySelector("#iaStop").onclick=()=>{stop=true;closeSheet()}});
   const res={};
-  for(let i=0;i<chunks.length;i++){if(stop)return;const p=document.getElementById("iaProg");if(p&&chunks.length>1)p.lastChild.textContent=` Lot ${i+1} sur ${chunks.length} (${all.length} notes)…`;
-    try{Object.assign(res,await sample.json(iaPrompt(gid,chunks[i]),{modelTier:"default",max:16000})||{})}
-    catch(e){if(stop)return;closeSheet();toast(e&&e.code==="rate_limited"?"Trop de demandes. Réessayez dans une minute.":"La lecture n'a pas fonctionné"+(e&&e.message?" : "+e.message:"."));if(!Object.keys(res).length)return;break}}
-  if(!stop)iaReview(gid,all,res)}
+  let nd=0;const prog=()=>{const p=document.getElementById("iaProg");if(p&&chunks.length>1)p.lastChild.textContent=` Lots terminés : ${nd} sur ${chunks.length} (${all.length} notes)…`};prog();
+  const out=await occPool(chunks,3,async ch=>{const r=await sample.json(iaPrompt(gid,ch),{modelTier:"default",max:16000});nd++;prog();return r});
+  if(stop)return;out.forEach(x=>{if(x.ok&&x.v)Object.assign(res,x.v)});const bad=out.filter(x=>!x.ok);
+  if(!Object.keys(res).length){closeSheet();const e=(bad[0]||{}).e;toast(e&&e.code==="rate_limited"?"Trop de demandes. Réessayez dans une minute.":"La lecture n'a pas fonctionné"+(e&&e.message?" : "+e.message:"."));return}
+  if(bad.length)toast(`${bad.length} lot${bad.length>1?"s":""} sur ${chunks.length} n'${bad.length>1?"ont":"a"} pas fonctionné : ces notes reviendront la prochaine fois.`);
+  iaReview(gid,all,res)}
 function iaKid(gid,name){const n=norm(String(name||""));if(!n)return "";const L=childrenOf(gid);const hit=L.find(([,c])=>kidNames(c).some(k=>norm(k)===n))||L.find(([,c])=>kidNames(c).some(k=>norm(k).startsWith(n)||n.startsWith(norm(k))));return hit?hit[0]:""}
 function iaReview(gid,all,res){const lab={n:"N",f:"F",x:"X",q:"Q"};const rows=[],auto=[];
   all.forEach(it=>{const r=res[lab[it.kind]+it.n];
