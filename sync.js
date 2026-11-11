@@ -262,6 +262,7 @@ const SYNC=window.SYNC={on:false,status:"off",msg:"",user:null,space:null,key:nu
 const b64u={to:b=>btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""),from:s=>Uint8Array.from(atob(s.replace(/-/g,"+").replace(/_/g,"/")+"===".slice((s.length+3)%4)),c=>c.charCodeAt(0))};
 const CONS=window.CONS={DESC_DEF:"Le projet a pour but de stimuler les habiletés de motricité, d'autonomie, de régulation émotionnelle, de langage et d'habiletés sociales. Il est animé par Mélanie Champagne, éducatrice spécialisée, et Valérie Ferron, ergothérapeute. Les rencontres ont lieu en forêt et le transport est assuré par le CAAL.",
   desc(g){return (g&&g.consDesc)||CONS.DESC_DEF},
+<<<<<<< HEAD
   SECS:[["projet","Le projet"],["services","Les services"],["partage","Partage de renseignements"],["photos","Photos et vidéos"],["carnet","Les notes et le carnet"],["risque","Prise de risque saine"]],
   cfgDef(){const P=(org,L)=>L.map(([n,r],i)=>({id:(org==="CAAL"?"pa":"pc")+i,nom:n,role:r||"",org}));
     return {annuaire:P("CO Clinique",[["Émilie Jacob","psychoéducatrice"],["Mélanie Champagne","éducatrice spécialisée"],["Valérie Ferron","ergothérapeute"],["Alexandra Tremblay","orthophoniste"],["Francis Tremblay","orthophoniste"],["Gabrielle Paquin","éducatrice spécialisée"]]).concat(P("CAAL",[["Marie Thielen"],["Molly Moar"],["Lydia Drouin-Tanguay"],["Caerline Brumie Soifaite"],["Stéphanie Bonsaint"],["Manon Doré"],["Emylou Lapalme"],["Anouk Comtois"],["Elena Trembay"],["Shanyng Versailles"],["Johanne Flamand"],["Luk Parlavecchio"]])),
@@ -304,12 +305,15 @@ const CONS=window.CONS={DESC_DEF:"Le projet a pour but de stimuler les habileté
       <p class="muted small" style="margin:8px 0 0">Annuaire et textes : Paramètres › Consentements.</p></details>`},
   groupFormRead(s,obj){const gc=s.querySelector("#gCons");if(!gc)return;const v=gc.value.trim();if(v&&v!==CONS.DESC_DEF)obj.consDesc=v;else delete obj.consDesc;
     const cp={};CONS.cfg().items.filter(it=>it.people&&it.on!==false).forEach(it=>{cp[it.k]=[...s.querySelectorAll(`[data-gcp="${CSS.escape(it.k)}"]:checked`)].map(i=>i.value)});obj.consPeople=cp},
+=======
+>>>>>>> 21998089ee505977c292da215e78e7453695af81
   list(c){return (c&&c.consents||[]).slice().sort((a,b)=>String(b.sentAt).localeCompare(String(a.sentAt)))},
   url(t,k){return location.origin+location.pathname.replace(/[^/]*$/,"")+"consentement.html#t="+t+"&k="+k},
   fd(iso){return iso?new Date(iso).toLocaleDateString("fr-CA",{day:"numeric",month:"long",year:"numeric"}):""},
   echeance(r){if(!r||!r.signedAt)return null;const d=new Date(r.signedAt);d.setDate(d.getDate()+365);return d},
   card(cid){const c=S.children.get(cid);if(!c)return "";const L=CONS.list(c);const sg=L.find(r=>r.status==="signe");const pd=L.find(r=>r.status==="envoye"&&new Date(r.sentAt).getTime()+30*864e5>Date.now());
     const ech=CONS.echeance(sg);const soon=ech&&ech.getTime()-Date.now()<30*864e5;
+<<<<<<< HEAD
     const st=sg?`✅ Signé${sg.type==="papier"?" (papier)":""} le ${CONS.fd(sg.signedAt)}${sg.type==="papier"?"":" par "+esc(((sg.data||{}).parents||[]).map(p=>p.nom).join(" et "))}${soon?` · <b style="color:#B5523B">partage de renseignements : échéance le ${CONS.fd(ech)}</b>`:""}${pd?` · nouveau lien envoyé le ${CONS.fd(pd.sentAt)}`:""}`
       :pd?`⏳ Envoyé le ${CONS.fd(pd.sentAt)}, en attente de réponse`:"Aucun consentement dans le carnet";
     return `<section class="card" style="padding:10px 14px"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b>Consentement</b><span class="small muted" style="flex:1 1 200px">${st}</span>
@@ -344,6 +348,17 @@ const CONS=window.CONS={DESC_DEF:"Le projet a pour but de stimuler les habileté
     const token=b64u.to(crypto.getRandomValues(new Uint8Array(16)));const raw=crypto.getRandomValues(new Uint8Array(16));const k=b64u.to(raw);
     const key=await crypto.subtle.importKey("raw",raw,"AES-GCM",false,["encrypt"]);const iv=crypto.getRandomValues(new Uint8Array(12));
     const meta={e:String(c.name||"").split(/\s+/)[0],g:String(g.name||"").replace(/\s*\([^)]*\)\s*$/,""),desc:CONS.desc(g),d:todayISO(),items:CONS.metaItems(g)};
+=======
+    const st=sg?`✅ Signé le ${CONS.fd(sg.signedAt)} par ${esc((sg.data.parents||[]).map(p=>p.nom).join(" et "))}${soon?` · <b style="color:#B5523B">partage de renseignements : échéance le ${CONS.fd(ech)}</b>`:""}${pd?` · nouveau lien envoyé le ${CONS.fd(pd.sentAt)}`:""}`
+      :pd?`⏳ Envoyé le ${CONS.fd(pd.sentAt)}, en attente de réponse`:"Aucun consentement dans le carnet";
+    return `<section class="card" style="padding:10px 14px"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b>Consentement</b><span class="small muted" style="flex:1 1 200px">${st}</span>
+      ${sg?`<button class="btn small" data-cons="view" data-id="${cid}" data-r="${sg.id}">Voir</button>`:""}
+      ${pd?`<button class="btn small" data-cons="share" data-id="${cid}" data-r="${pd.id}">Renvoyer le lien</button>`:`<button class="btn small${sg?" ghost":" primary"}" data-cons="send" data-id="${cid}">${sg?"Nouveau formulaire":"Envoyer le consentement"}</button>`}</div></section>`},
+  async send(cid){if(!SYNC.on){toast("Activez d'abord la synchronisation.");return}const c=S.children.get(cid);const g=S.groups.get(c.groupId)||{};
+    const token=b64u.to(crypto.getRandomValues(new Uint8Array(16)));const raw=crypto.getRandomValues(new Uint8Array(16));const k=b64u.to(raw);
+    const key=await crypto.subtle.importKey("raw",raw,"AES-GCM",false,["encrypt"]);const iv=crypto.getRandomValues(new Uint8Array(12));
+    const meta={e:String(c.name||"").split(/\s+/)[0],g:String(g.name||"").replace(/\s*\([^)]*\)\s*$/,""),desc:CONS.desc(g),d:todayISO()};
+>>>>>>> 21998089ee505977c292da215e78e7453695af81
     const ct=await crypto.subtle.encrypt({name:"AES-GCM",iv},key,enc.encode(JSON.stringify(meta)));
     await SYNC.be.consCreate(SYNC.space.id,token,b64(ct),b64(iv));
     const id="cs"+token.slice(0,8);mutChild(cid,x=>{(x.consents=x.consents||[]).push({id,token,k,sentAt:new Date().toISOString(),status:"envoye",by:getMe()})});
@@ -367,6 +382,7 @@ const CONS=window.CONS={DESC_DEF:"Le projet a pour but de stimuler les habileté
         if(!x.dob&&/^\d{4}-\d{2}-\d{2}$/.test(E.ddn||""))x.dob=E.ddn;if(!x.nom&&E.nom){const pr=String(x.name||"").trim().toLowerCase(),full=String(E.nom).trim();if(full.toLowerCase().startsWith(pr+" ")&&full.length>pr.length+1)x.nom=full.slice(pr.length+1).trim()}const lg=[E.l1,E.l2,E.l3].filter(v=>String(v||"").trim()).join(", ");if(!x.langues&&lg)x.langues=lg;
         x.infos=Object.assign({},x.infos||{},{nomComplet:E.nom||"",adresse:E.adresse||"",tel:E.tel||"",courriel:E.courriel||"",allergies:E.allergies?("Oui : "+(E.allergies_detail||"")):"Non",poids:E.poids||"",maj:todayISO(),src:"consentement"})});
       try{await SYNC.be.consDelete(row.token)}catch(e){}toast("Consentement reçu pour "+(S.children.get(cid)||{}).name)}},
+<<<<<<< HEAD
   docHTML(cid,rid){const c=S.children.get(cid);const r=(c.consents||[]).find(x=>x.id===rid);if(!r)return "";
     if(r.type==="papier"){const im=(r.files||[]).filter(f=>/^image\//.test(f.mime)),pf=(r.files||[]).filter(f=>!/^image\//.test(f.mime));
       return `<div class="oxdoc cons"><h2 style="margin:0 0 2px">Consentement (formulaire papier)</h2><p class="muted small" style="margin:0">${esc(c.name)}${c.nom?" "+esc(c.nom):""} · ${esc((S.groups.get(c.groupId)||{}).name||"")}</p>
@@ -378,6 +394,13 @@ const CONS=window.CONS={DESC_DEF:"Le projet a pour but de stimuler les habileté
     return `<div class="oxdoc cons"><div style="display:flex;justify-content:space-between;align-items:center"><img src="assets/logo-coclinique.png" alt="" style="height:54px"><img src="assets/logo-caal.png" alt="" style="height:60px"></div>
       <h2 style="text-align:center;margin:8px 0 2px">Formulaire de consentement</h2><p class="muted small" style="text-align:center;margin:0">${esc(c.name)} · ${esc((S.groups.get(c.groupId)||{}).name||"")}</p>
       <div class="oxk"><h3>Titulaire(s) de l'autorité parentale</h3>${(D.parents||[]).map(p=>`<p class="oxs">${esc(p.nom)}, en qualité de ${esc(p.qualite)}</p>`).join("")}${D.attestation?`<p class="oxs small"><b>Attestation :</b> ${esc(D.attestation)}</p>`:""}</div>
+=======
+  docHTML(cid,rid){const c=S.children.get(cid);const r=(c.consents||[]).find(x=>x.id===rid);if(!r||!r.data)return "";const D=r.data,E=D.enfant||{},T=D.textes||{};const ech=CONS.echeance(r);
+    const sec={};(T.items||[]).forEach(it=>{(sec[it.s]=sec[it.s]||[]).push(it)});
+    return `<div class="oxdoc cons"><div style="display:flex;justify-content:space-between;align-items:center"><img src="assets/logo-coclinique.png" alt="" style="height:54px"><img src="assets/logo-caal.png" alt="" style="height:60px"></div>
+      <h2 style="text-align:center;margin:8px 0 2px">Formulaire de consentement</h2><p class="muted small" style="text-align:center;margin:0">${esc(c.name)} · ${esc((S.groups.get(c.groupId)||{}).name||"")}</p>
+      <div class="oxk"><h3>Titulaire(s) de l'autorité parentale</h3>${(D.parents||[]).map(p=>`<p class="oxs">${esc(p.nom)}, en qualité de ${esc(p.qualite)}</p>`).join("")}</div>
+>>>>>>> 21998089ee505977c292da215e78e7453695af81
       <div class="oxk"><h3>Le projet</h3><p class="oxs">${esc(T.desc||"")}</p></div>
       <div class="oxk"><h3>L'enfant</h3><p class="oxs"><b>Prénom et nom :</b> ${esc(E.nom)} · <b>Date de naissance :</b> ${esc(E.ddn)}</p><p class="oxs"><b>Adresse :</b> ${esc(E.adresse)}</p><p class="oxs"><b>Téléphone :</b> ${esc(E.tel)}${E.courriel?` · <b>Courriel :</b> ${esc(E.courriel)}`:""}</p>
         <p class="oxs"><b>Allergies :</b> ${E.allergies?"Oui, "+esc(E.allergies_detail):"Non"} · <b>Poids :</b> ${esc(E.poids)}</p><p class="oxs"><b>Langues :</b> ${esc([E.l1,E.l2,E.l3].filter(Boolean).join(", "))}</p></div>
@@ -388,16 +411,26 @@ const CONS=window.CONS={DESC_DEF:"Le projet a pour but de stimuler les habileté
         ${r.counter?`<p class="oxs small">Reçu et contresigné par ${esc(r.counter.by||"l'intervenante")} le ${CONS.fd(r.counter.at)}.</p>`:""}
         ${ech?`<p class="oxs small">Autorisations de partage de renseignements valides jusqu'au ${CONS.fd(ech)}.</p>`:""}
         <p class="oxs small muted">Empreinte numérique (SHA-256) : <span style="word-break:break-all">${r.hash}</span></p></div></div>`},
+<<<<<<< HEAD
   async view(cid,rid){const c=S.children.get(cid);const r=(c.consents||[]).find(x=>x.id===rid);if(!r)return;if(r.files)await CONS.preload(r.files.filter(f=>/^image\//.test(f.mime)).map(f=>f.id));
     openSheet(`<h3>Consentement · ${esc(c.name)}</h3><p class="muted small" style="margin:0">Document verrouillé : il ne peut pas être modifié. Pour un changement, envoyez un nouveau formulaire.</p>
       <div class="row-actions"><button class="btn primary" id="cvPrint">Imprimer / PDF</button>${(r.files||[]).filter(f=>!/^image\//.test(f.mime)).map(f=>`<button class="btn" data-cons="pdf" data-f="${f.id}">📄 Ouvrir ${esc(f.name||"le PDF")}</button>`).join("")}${r.counter?"":`<button class="btn" id="cvSign">Contresigner (réception)</button>`}<button class="btn" id="cvClose">Fermer</button></div>${CONS.docHTML(cid,rid)}`,s=>{
+=======
+  view(cid,rid){const c=S.children.get(cid);const r=(c.consents||[]).find(x=>x.id===rid);if(!r)return;
+    openSheet(`<h3>Consentement · ${esc(c.name)}</h3><p class="muted small" style="margin:0">Document verrouillé : il ne peut pas être modifié. Pour un changement, envoyez un nouveau formulaire.</p>
+      <div class="row-actions"><button class="btn primary" id="cvPrint">Imprimer / PDF</button>${r.counter?"":`<button class="btn" id="cvSign">Contresigner (réception)</button>`}<button class="btn" id="cvClose">Fermer</button></div>${CONS.docHTML(cid,rid)}`,s=>{
+>>>>>>> 21998089ee505977c292da215e78e7453695af81
         s.querySelector("#cvClose").onclick=closeSheet;s.querySelector("#cvPrint").onclick=()=>printHTML(CONS.docHTML(cid,rid));
         const cs=s.querySelector("#cvSign");if(cs)cs.onclick=()=>{mutChild(cid,x=>{const z=(x.consents||[]).find(q=>q.id===rid);if(z&&!z.counter)z.counter={by:getMe()||"",at:new Date().toISOString()}});CONS.view(cid,rid);toast("Contresigné")}})}
 };
 document.addEventListener("click",e=>{const b=e.target.closest("[data-cons]");if(!b)return;e.preventDefault();const a=b.dataset.cons;
+<<<<<<< HEAD
   if(a==="send")SYNC.act(()=>CONS.send(b.dataset.id));else if(a==="share")CONS.share(b.dataset.id,b.dataset.r);else if(a==="view")CONS.view(b.dataset.id,b.dataset.r);
   else if(a==="paper")CONS.paper(b.dataset.id);else if(a==="group")CONS.groupSheet(b.dataset.id);else if(a==="pdf")CONS.openFile(b.dataset.f)});
 document.addEventListener("click",e=>{const b=e.target.closest("[data-cset]");if(!b)return;e.preventDefault();CONS.settingsAct(b.dataset.cset,b)});
+=======
+  if(a==="send")SYNC.act(()=>CONS.send(b.dataset.id));else if(a==="share")CONS.share(b.dataset.id,b.dataset.r);else if(a==="view")CONS.view(b.dataset.id,b.dataset.r)});
+>>>>>>> 21998089ee505977c292da215e78e7453695af81
 
 document.addEventListener("click",e=>{const t=e.target.closest("[data-sync]");if(!t)return;e.preventDefault();SYNC.open()});
 (async function boot(){for(let i=0;i<200&&!(LOCAL.idb&&S.ready);i++)await sleep(100);if(LOCAL.idb)SYNC.start()})();
