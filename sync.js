@@ -43,7 +43,7 @@ function supaBackend(){
     async getOne(space,id){return ok(await sb.from("docs").select("id,data,iv,deleted,updated_at").eq("space_id",space).eq("id",id).maybeSingle())},
     async ai(prompt,json,max){const {data}=await sb.auth.getSession();const tok=data&&data.session&&data.session.access_token;if(!tok)throw new Error("Connexion requise");
       const r=await fetch(CFG.url+"/functions/v1/ia",{method:"POST",headers:{"Authorization":"Bearer "+tok,"apikey":CFG.key,"Content-Type":"application/json"},body:JSON.stringify({prompt,json:!!json,max:max||undefined})});
-      const j=await r.json().catch(()=>({}));if(!r.ok){const e=new Error(j.error||("Erreur "+r.status));if(r.status===429)e.code="rate_limited";if(r.status===404)e.message="La fonction « ia » n'est pas encore installée dans Supabase.";throw e}return j.text||""},
+      const j=await r.json().catch(()=>({}));if(!r.ok){const e=new Error(j.error||("Erreur "+r.status));if(r.status===429)e.code="rate_limited";if(r.status===404)e.message="La fonction « ia » n'est pas encore installée dans Supabase.";throw e}return{text:j.text||"",usage:j.usage||null}},
     async consCreate(space,token,meta,iv){ok(await sb.from("consent_requests").insert({token,space_id:space,meta,meta_iv:iv}))},
     async consList(space){return ok(await sb.from("consent_requests").select("token,payload,payload_iv,used_at").eq("space_id",space).not("used_at","is",null))},
     async consDelete(token){ok(await sb.from("consent_requests").delete().eq("token",token))},
@@ -67,6 +67,12 @@ const IA={rules(){const d=LOCAL.cache.get("config/ia");return d&&typeof d.regles
   setRules(v){const d=Object.assign({},LOCAL.cache.get("config/ia")||{});d.regles=v;db.doc("config/ia").set(d)},
   noms(){const d=LOCAL.cache.get("config/ia");return String(d&&d.noms||"").split(/[,;\n]+/).map(x=>x.trim()).filter(x=>x.length>1)},
   setNoms(v){const d=Object.assign({},LOCAL.cache.get("config/ia")||{});d.noms=v;if(typeof d.regles!=="string")d.regles=IA.rules();db.doc("config/ia").set(d)},
+  month(){return new Date().toISOString().slice(0,7)},
+  usage(){const d=LOCAL.cache.get("config/iausage")||{};const m=(d.m||{})[IA.month()]||{n:0,i:0,o:0};const rate=Object.assign({i:3,o:15},d.rate||{});const cost=(m.i*rate.i+m.o*rate.o)/1e6;return{n:m.n,i:m.i,o:m.o,cost,rate,limit:+d.limit||0}},
+  count(sent,got,u){try{const d=JSON.parse(JSON.stringify(LOCAL.cache.get("config/iausage")||{}));d.m=d.m||{};const k=IA.month();const m=d.m[k]||{n:0,i:0,o:0};m.n++;m.i+=u&&u.input_tokens?u.input_tokens:Math.ceil(String(sent).length/3.5);m.o+=u&&u.output_tokens?u.output_tokens:Math.ceil(String(got).length/3.5);d.m[k]=m;db.doc("config/iausage").set(d);
+    const U=IA.usage();if(U.limit&&U.cost>=U.limit*.8&&!IA._warned){IA._warned=1;toast("IA : environ "+U.cost.toFixed(2)+" $ ce mois-ci sur une limite de "+U.limit+" $")}}catch(e){console.warn(e)}},
+  guard(){const U=IA.usage();if(U.limit&&U.cost>=U.limit){const e=new Error("Limite mensuelle de l'IA atteinte (environ "+U.cost.toFixed(2)+" $ sur "+U.limit+" $). Changez la limite dans Synchronisation si vous voulez continuer.");e.code="limit";SYNC.lastErr=e.message;throw e}},
+  setUsage(o){const d=JSON.parse(JSON.stringify(LOCAL.cache.get("config/iausage")||{}));Object.assign(d,o);db.doc("config/iausage").set(d)},
   on(){try{return localStorage.getItem("carnet-ia")==="1"}catch(e){return false}},
   set(v){try{localStorage.setItem("carnet-ia",v?"1":"0")}catch(e){}IA.apply()},
   apply(){sample=SYNC.on&&IA.on()?IA.sampler():null},
@@ -79,7 +85,7 @@ const IA={rules(){const d=LOCAL.cache.get("config/ia");return d&&typeof d.regles
     return{rx:pairs.filter(p=>p[0].trim().length>1).map(([n,t])=>[new RegExp("(?<![\\p{L}\\p{N}_])"+[...strip(n.trim())].map(ch=>{const l=ch.toLowerCase();return ACC[l]||ch.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")}).join("")+"(?![\\p{L}\\p{N}_])","giu"),t]),back}},
   mask(text){const T=IA.table();let s=String(text).normalize("NFC");T.rx.forEach(([r,t])=>{s=s.replace(r,t)});return{text:s,back:T.back}},
   unmask(s,back){return String(s).replace(/(Enfant|Adulte)_([A-Z]{1,2})(?![A-Za-z])/g,m=>back[m]||m)},
-  async ask(prompt,json,max){const r=IA.rules().trim();if(r)prompt="CONSIGNES DE RÉDACTION DE L'ERGOTHÉRAPEUTE (à suivre pour tout texte que tu écris ; dans le carnet, chaque note reste une entrée séparée et tu respectes le format de réponse demandé plus bas) :\n"+r+"\n\n---\n\n"+prompt;const m=IA.mask(prompt);SYNC.lastSent=m.text;SYNC.lastErr="";let t;try{t=await SYNC.be.ai(m.text,json,max)}catch(e){SYNC.lastErr=String(e&&e.message||e);throw e}SYNC.lastGot=t;return IA.unmask(t,m.back)},
+  async ask(prompt,json,max){const r=IA.rules().trim();if(r)prompt="CONSIGNES DE RÉDACTION DE L'ERGOTHÉRAPEUTE (à suivre pour tout texte que tu écris ; dans le carnet, chaque note reste une entrée séparée et tu respectes le format de réponse demandé plus bas) :\n"+r+"\n\n---\n\n"+prompt;const m=IA.mask(prompt);SYNC.lastSent=m.text;SYNC.lastErr="";IA.guard();let t;try{t=await SYNC.be.ai(m.text,json,max)}catch(e){SYNC.lastErr=String(e&&e.message||e);throw e}let u=null;if(t&&typeof t==="object"){u=t.usage;t=t.text||""}IA.count(m.text,t,u);SYNC.lastGot=t;return IA.unmask(t,m.back)},
   parse(t){t=String(t).replace(/```(?:json)?/g,"");const i=t.search(/[\[{]/);const j=Math.max(t.lastIndexOf("}"),t.lastIndexOf("]"));if(i<0||j<i)throw {code:"format"};try{return JSON.parse(t.slice(i,j+1))}catch(e){throw {code:"format"}}},
   sampler(){const f=async(prompt,opts)=>{const t=await IA.ask(prompt,false);try{opts&&opts.onText&&opts.onText({text:t})}catch(e){}return{text:t}};
     f.json=async(prompt,opts)=>{const mx=opts&&opts.max;let t=await IA.ask(prompt,true,mx);try{return IA.parse(t)}catch(e){}
@@ -237,6 +243,9 @@ const SYNC=window.SYNC={on:false,status:"off",msg:"",user:null,space:null,key:nu
         <details style="margin-top:6px"><summary class="small"><b>Autres noms à cacher</b> (adultes, intervenantes, école)</summary><p class="small muted" style="margin:4px 0">Les prénoms des enfants et le vôtre sont déjà cachés. Ajoutez ici les noms qui reviennent dans vos notes, séparés par des virgules.</p><textarea class="field" id="syNoms" style="min-height:70px" placeholder="Ex. : Gabrielle, Francis, Karine Dagenais, Le Préambule">${esc(IA.noms().join(", "))}</textarea><div class="row-actions"><button class="btn small primary" id="syNomsOk">Enregistrer</button></div></details>
         <details style="margin-top:6px"><summary class="small"><b>Mes consignes de rédaction</b></summary><textarea class="field" id="syRules" style="min-height:220px;font-size:.85rem">${esc(IA.rules())}</textarea>
           <div class="row-actions"><button class="btn small primary" id="syRulesOk">Enregistrer les consignes</button><button class="btn ghost small" id="syRulesDef">Remettre celles par défaut</button></div></details>
+        ${(()=>{const U=IA.usage();return`<details style="margin-top:6px" id="syUse"><summary class="small"><b>Utilisation ce mois-ci</b> : ${U.n} demande${U.n>1?"s":""} · environ ${U.cost.toFixed(2)} $${U.limit?` sur ${U.limit} $`:""}</summary>
+          <p class="small muted" style="margin:4px 0">Estimation calculée sur cet appareil et celui de votre collègue (même groupe). La facture réelle est sur console.anthropic.com.</p>
+          <div class="row" style="gap:8px;flex-wrap:wrap;align-items:end"><label class="small">Limite par mois ($, 0 = aucune)<input class="field" id="syLim" type="number" min="0" step="1" value="${U.limit||0}" style="width:110px"></label><label class="small">$ par million de jetons envoyés<input class="field" id="syRi" type="number" min="0" step="0.5" value="${U.rate.i}" style="width:90px"></label><label class="small">reçus<input class="field" id="syRo" type="number" min="0" step="0.5" value="${U.rate.o}" style="width:90px"></label><button class="btn small" id="syLimOk">Enregistrer</button></div></details>`})()}
         ${SYNC.lastSent?`<div class="row-actions" style="margin-top:6px"><button class="btn ghost small" id="sySent">Voir le dernier envoi</button></div>`:""}</div>
       <div class="row-actions" style="margin-top:14px"><button class="btn ghost small" id="syLock">Oublier le mot de passe du groupe sur cet appareil</button><button class="btn ghost small" id="syOut">Se déconnecter</button></div>`,s=>{
         const q=x=>s.querySelector(x);
@@ -244,6 +253,7 @@ const SYNC=window.SYNC={on:false,status:"off",msg:"",user:null,space:null,key:nu
         q("#syInv").onclick=()=>SYNC.act(async()=>{const A="ABCDEFGHJKMNPQRSTUVWXYZ23456789";const r=crypto.getRandomValues(new Uint8Array(8));const code=[...r].map(x=>A[x%A.length]).join("");
           await SYNC.be.createInvite(SYNC.space.id,code);
           q("#syInvBox").innerHTML=`<div class="notice" style="margin-top:10px">Code : <b style="font-size:1.3rem;letter-spacing:2px">${code.slice(0,4)}-${code.slice(4)}</b><br><span class="small">Valide 7 jours. Votre collègue installe le carnet test, crée son compte, choisit « Rejoindre avec un code » et entre ce code avec le <b>mot de passe du groupe</b> (dites-le-lui de vive voix, pas dans le même message).</span></div>`});
+        q("#syLimOk").onclick=()=>{IA.setUsage({limit:Math.max(0,+q("#syLim").value||0),rate:{i:+q("#syRi").value||3,o:+q("#syRo").value||15}});IA._warned=0;toast("Limite enregistrée")};
         q("#syNomsOk").onclick=()=>{IA.setNoms(q("#syNoms").value);toast("Noms enregistrés : ils seront cachés à l'envoi")};
         q("#syRulesOk").onclick=()=>{IA.setRules(q("#syRules").value);toast("Consignes enregistrées")};
         q("#syRulesDef").onclick=()=>{q("#syRules").value=IA_DEF;IA.setRules(IA_DEF);toast("Consignes par défaut remises")};

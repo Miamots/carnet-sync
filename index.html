@@ -1017,7 +1017,7 @@ async function persist(kind,id){
   if(w.busy){w.dirty=true;return}
   w.busy=true;setSync("Enregistrement…");
   try{
-    do{w.dirty=false;const obj=map.get(id);
+    do{w.dirty=false;const obj=map.get(id);if(kind==="children"&&obj&&typeof LOCAL!=="undefined"&&LOCAL.cache){try{traceNotes(LOCAL.cache.get(path),obj)}catch(e){console.warn(e)}}
       if(obj===undefined){await db.doc(path).delete()}else{await db.doc(path).set(JSON.parse(JSON.stringify(obj)))}
     }while(w.dirty);
     setSync("Enregistré");
@@ -1362,7 +1362,7 @@ function iaSave(gid,picks,auto){const me=getMe();const X=new Map();const get=cid
   X.forEach((x,cid)=>{S.children.set(cid,x);persist("children",cid)});
   if(qDone.size){const gg=JSON.parse(JSON.stringify(S.groups.get(gid)));gg.inbox=(gg.inbox||[]).filter(q=>!qDone.has(q.id));S.groups.set(gid,gg);persist("groups",gid)}
   closeSheet();render();toast(n?`${n} note${n>1?"s":""} rangée${n>1?"s":""} et corrigée${n>1?"s":""}`:"Tout était déjà correct")}
-function iaBtn(gid,big){const n=iaPending(gid).length;return `<button class="btn ${big?"primary":"small primary"}" data-act="iaAll" data-id="${gid}" ${n?"":"disabled"}>✨ Tout ranger et corriger${n?` (${n})`:""}</button>${big?"":`<button class="btn ghost small" data-act="notesMenu" data-id="${gid}" title="Reprendre le rangement de notes déjà traitées">↻</button>`}`}
+function iaBtn(gid,big){const n=iaPending(gid).length;return `<button class="btn ${big?"primary":"small primary"}" data-act="iaAll" data-id="${gid}" ${n?"":"disabled"}>✨ Tout ranger et corriger${n?` (${n})`:""}</button>${big?"":`<button class="btn ghost small" data-act="notesMenu" data-id="${gid}" title="Reprendre le rangement, importer des notes prises ailleurs">⋯ Notes</button>`}`}
 /* ---------- Version B : banque à cocher, photos en lot, prochaine rencontre, retour de sortie, frise ---------- */
 function bankAdd(cid,nums){const c=S.children.get(cid);if(!c)return 0;let n=0;
   mutChild(cid,x=>{x.objectifs=x.objectifs||[];nums.forEach(num=>{const b=BANK.find(z=>String(z.n)===String(num));if(!b)return;if(x.objectifs.some(o=>!o.arch&&o.label===b.l))return;
@@ -1484,6 +1484,40 @@ function retourSheet(gid,tab){const g=S.groups.get(gid);const d=S.obsDate||today
             const all=()=>[...s.querySelectorAll(".rtm")].map(t=>t.closest("label").firstChild.textContent.trim()+" : "+t.value.trim()).join("\n\n");
             s.querySelector("#rtEC").onclick=()=>copyText(all(),"Mots copiés");const es=s.querySelector("#rtES");if(es)es.onclick=()=>navigator.share({text:all()}).catch(()=>{})}
           catch(err){toast("La rédaction n'a pas fonctionné.")}e.disabled=false;e.textContent="✨ Rédiger les mots"}}})}
+/* ---------- Traçabilité, vue d'ensemble, rappels ---------- */
+function traceNotes(prev,next){if(!prev||!next)return;const now=new Date().toISOString(),me=getMe()||"";const P=new Map((prev.notes||[]).map(n=>[n.id,n]));
+  (next.notes||[]).forEach(n=>{const o=P.get(n.id);if(o&&String(o.text||"")!==String(n.text||"")){const h=n.hist||[];const last=h[h.length-1];if(!(last&&last.t===o.text))n.hist=h.concat([{t:o.text,at:now,by:me}])}});
+  const N=new Set((next.notes||[]).map(n=>n.id));const T=next.trash||[];
+  (prev.notes||[]).forEach(o=>{if(!N.has(o.id)&&!T.some(t=>t.id===o.id))T.push(Object.assign({},o,{delAt:now,delBy:me}))});if(T.length)next.trash=T.slice(-300)}
+function noteHistSheet(cid,nid){const c=S.children.get(cid);const n=(c.notes||[]).find(x=>x.id===nid);if(!n)return;const H=(n.hist||[]).slice().reverse();
+  openSheet(`<h3>Historique de la note</h3><p class="muted small" style="margin:0">${esc(c.name)} · ${fmtD(n.date)}</p>
+    <div class="cdj" style="margin:8px 0"><p class="label" style="margin:0 0 2px">Version actuelle</p><p style="margin:0">${esc(n.text)}</p></div>
+    ${H.map(h=>`<div style="border-top:1px dashed var(--line);padding:6px 0"><p class="small muted" style="margin:0">Remplacée le ${new Date(h.at).toLocaleString("fr-CA",{dateStyle:"medium",timeStyle:"short"})}${h.by?" par "+esc(h.by):""}</p><p style="margin:2px 0 0;white-space:pre-wrap">${esc(h.t)}</p></div>`).join("")}
+    ${n.raw&&!(n.hist||[]).some(h=>h.t===n.raw)?`<div style="border-top:1px dashed var(--line);padding:6px 0"><p class="small muted" style="margin:0">Version d'origine (dictée)</p><p style="margin:2px 0 0;white-space:pre-wrap">${esc(n.raw)}</p></div>`:""}
+    <div class="row-actions"><button class="btn" id="nhC">Fermer</button></div>`,s=>{s.querySelector("#nhC").onclick=closeSheet})}
+function trashSheet(cid){const c=S.children.get(cid);const T=(c.trash||[]).slice().reverse();
+  openSheet(`<h3>Notes supprimées · ${esc(c.name)}</h3><p class="muted small" style="margin:0">Gardées pour la traçabilité du dossier. Vous pouvez en remettre une.</p>
+    ${T.map(n=>`<div style="border-top:1px dashed var(--line);padding:6px 0"><p class="small muted" style="margin:0">${fmtD(n.date)} · supprimée le ${new Date(n.delAt).toLocaleString("fr-CA",{dateStyle:"medium",timeStyle:"short"})}${n.delBy?" par "+esc(n.delBy):""}</p><p style="margin:2px 0;white-space:pre-wrap">${esc(n.text)}</p><button class="btn ghost small" data-trr="${n.id}">Remettre</button></div>`).join("")||`<p class="muted small">Aucune.</p>`}
+    <div class="row-actions"><button class="btn" id="trC">Fermer</button></div>`,s=>{s.querySelector("#trC").onclick=closeSheet;
+      s.querySelectorAll("[data-trr]").forEach(b=>b.onclick=()=>{const id=b.dataset.trr;mutChild(cid,x=>{const i=(x.trash||[]).findIndex(t=>t.id===id);if(i<0)return;const n=Object.assign({},x.trash[i]);delete n.delAt;delete n.delBy;x.trash.splice(i,1);(x.notes=x.notes||[]).push(n)});toast("Note remise");trashSheet(cid)})})}
+function groupOverview(gid){const g=S.groups.get(gid);const kids=childrenOf(gid);
+  const lastN=c=>(c.notes||[]).map(n=>n.date).filter(Boolean).sort().pop();
+  const body=kids.map(([k,c])=>{const O=childObjs(c).filter(o=>!o.done);const ln=lastN(c);const nCk=Object.values(c.checks||{}).filter(a=>a&&a.length).length;
+    return `<div class="ovk" style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line);break-inside:avoid"><img src="${avSrc(c)}"${avAt(c)} alt="" style="width:40px;height:40px;border-radius:50%;flex:none"><div style="flex:1;min-width:0"><b>${esc(c.name)}</b> <span class="small muted">${ln?"dernière note "+fmtD(ln):"aucune note"}${!O.length&&nCk?" · "+nCk+" repère"+(nCk>1?"s":"")+" observé"+(nCk>1?"s":""):""}</span>
+      ${O.map(o=>`<div style="margin-top:4px"><span class="small">🎯 ${esc(objShort(o))}</span>${objFrise(o,8)||`<div class="small muted">pas encore noté</div>`}</div>`).join("")}</div></div>`}).join("");
+  const html=`<div class="oxdoc"><h2 style="margin:0 0 4px">Vue d'ensemble · ${esc(g.name)}</h2><p class="small muted" style="margin:0 0 6px">${new Date().toLocaleDateString("fr-CA",{dateStyle:"long"})} · ${kids.length} enfant${kids.length>1?"s":""}</p>${body}</div>`;
+  openSheet(`<div class="row-actions"><button class="btn primary" id="ovP">Imprimer / PDF</button><button class="btn" id="ovC">Fermer</button></div>${html}`,s=>{s.querySelector("#ovC").onclick=closeSheet;s.querySelector("#ovP").onclick=()=>printHTML(html)})}
+function remindersOf(gid){const g=S.groups.get(gid);if(!g)return [];const R=[];const kids=childrenOf(gid);
+  if(window.CONS)kids.forEach(([k,c])=>{const sg=CONS.list(c).find(r=>r.status==="signe");const e=sg&&CONS.echeance(sg);if(e&&e.getTime()-Date.now()<30*864e5)R.push({t:`Consentement de ${c.name} : échéance le ${CONS.fd(e)}`,a:`<button class="btn small" data-cons="send" data-id="${k}">Renvoyer</button>`})});
+  const P=Object.entries(g.presences||{}).sort((a,b)=>b[0].localeCompare(a[0]));
+  kids.forEach(([k,c])=>{const D=P.filter(([d,L])=>(L||[]).includes(k)).slice(0,3).map(x=>x[0]);if(D.length<3)return;
+    childObjs(c).filter(o=>!o.done).forEach(o=>{const hit=D.some(d=>(o.marks||{})[d])||(c.notes||[]).some(n=>n.cobj===o.id&&D.includes(n.date));if(!hit)R.push({t:`${c.name} : « ${objShort(o)} » pas noté depuis 3 rencontres`,a:`<a class="btn small" href="#e-${k}" style="text-decoration:none">Fiche</a>`})})});
+  const ph=(g.photoInbox||[]).length;if(ph)R.push({t:`${ph} photo${ph>1?"s":""} à classer`,a:`<button class="btn small" data-act="phSort" data-id="${gid}">Classer</button>`});
+  return R}
+function remindersSheet(gid){const R=remindersOf(gid);openSheet(`<h3>Rappels</h3>${R.map(r=>`<div style="display:flex;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line)"><span style="flex:1">${esc(r.t)}</span>${r.a}</div>`).join("")||`<p class="muted small">Aucun rappel.</p>`}<div class="row-actions"><button class="btn" id="rmC">Fermer</button></div>`,s=>{s.querySelector("#rmC").onclick=closeSheet})}
+const LINKIMGS=["obj-nature","obj-histoire","obj-cercle","obj-partager","obj-aide","obj-mots","obj-chanter","obj-calme","obj-emotions","obj-respirer","obj-arrivee","obj-depart","obj-retour","obj-diner","obj-habiller","obj-ranger","obj-tour","obj-appel","obj-perimetre","obj-mains","obj-parole","obj-adeux"];
+function linkImgSrc(x){return x&&x.ph?x.ph:ICW((x&&x.img)||"obj-nature")}
+async function smallPhoto(f){const u=URL.createObjectURL(f);try{const im=await new Promise((r,j)=>{const i=new Image();i.onload=()=>r(i);i.onerror=j;i.src=u});const S2=240,cv=document.createElement("canvas");cv.width=S2;cv.height=S2;const s=Math.min(im.width,im.height);cv.getContext("2d").drawImage(im,(im.width-s)/2,(im.height-s)/2,s,s,0,0,S2,S2);return cv.toDataURL("image/jpeg",.82)}finally{URL.revokeObjectURL(u)}}
 /* ---------- Activités proposées ---------- */
 function actBank(g){const m=new Map();Object.values(g.activites||{}).forEach(L=>(L||[]).forEach(a=>{const k=norm(a.text);const o=m.get(k)||{text:a.text,occ:a.occ,n:0};o.n++;if(!o.occ&&a.occ)o.occ=a.occ;m.set(k,o)}));return [...m.values()].sort((a,b)=>b.n-a.n)}
 function actBlock(gid,d){const g=S.groups.get(gid);const L=(g.activites||{})[d]||[];const fut=d>todayISO();const bank=actBank(g).filter(b=>!L.some(a=>norm(a.text)===norm(b.text))).slice(0,12);
@@ -1798,7 +1832,7 @@ function todayHTML(gid,g,kids){const d=S.obsDate;const pr=presOf(g,d)||[];const 
   <div class="tgrid">${sk.map(([cid,c])=>{const done=dayTouched(c,d);const isP=pr.includes(cid);
     return `<div class="tkw${isP?" pres":""}"><a class="tkid" href="#e-${cid}"><span class="tav"><img src="${avSrc(c)}"${avAt(c)} alt=""></span><b>${starH(c)}${esc(c.name)}</b></a><button class="tpres${isP?" on":""}" data-act="presMark" data-id="${gid}" data-c="${cid}" aria-pressed="${isP}" aria-label="${esc(c.name)} ${isP?"présent":"absent"}">${isP?"✓ présent":"présent ?"}</button></div>`}).join("")}</div>
   ${kids.length?"":`<p class="muted small">Aucun enfant pour l'instant.</p>`}
-  <div class="row-actions" style="margin-top:10px"><button class="btn small primary" data-act="gObjAll" data-id="${gid}">Objectifs des enfants</button><button class="btn small" data-act="gEval" data-id="${gid}">Évaluation et PI</button></div>
+  <div class="row-actions" style="margin-top:10px"><button class="btn small primary" data-act="gObjAll" data-id="${gid}">Objectifs des enfants</button><button class="btn small" data-act="gEval" data-id="${gid}">Évaluation et PI</button><button class="btn small" data-act="gOver" data-id="${gid}">Vue d'ensemble</button></div>
   ${pd.length?det("pt-"+gid,`Tableau des présences (${pd.length} rencontre${pd.length>1?"s":""})`,`<div class="cov-wrap"><table class="cov ptab"><thead><tr><th></th><th>Total</th>${pd.slice().reverse().map(x=>`<th><span>${fmtD(x)}</span></th>`).join("")}</tr></thead><tbody>${kids.map(([cid,c])=>{const n=pd.filter(x=>g.presences[x].includes(cid)).length;return `<tr><th><a href="#e-${cid}">${esc(c.name)}</a></th><td class="ptot">${n}/${pd.length}</td>${pd.slice().reverse().map(x=>{const on=g.presences[x].includes(cid);return `<td class="${on?"pon":"poff"}">${on?"✓":"·"}</td>`}).join("")}</tr>`}).join("")}<tr class="psum"><th>Présents</th><td></td>${pd.slice().reverse().map(x=>`<td>${g.presences[x].length}</td>`).join("")}</tr></tbody></table></div>`):""}</section>`}
 function presenceHTML(gid,g,kids){const p=presOf(g,S.obsDate)||[];S.prInit=S.prInit||new Set();if(!S.prInit.has(gid)){openDetails.add("pr-"+gid);S.prInit.add(gid)}
   return `<section class="card"><details class="ogdet" data-dk="pr-${gid}" ${openDetails.has("pr-"+gid)?"open":""}><summary><h3 style="font-size:1.35rem;display:inline">Présences</h3> <span class="muted small">${p.length} le ${fmtD(S.obsDate)}</span></summary><div class="ordhead" style="margin-top:6px"><span></span><label class="obsdate small"><span class="label">Date</span><input type="date" value="${S.obsDate}" data-act="obsDate"></label></div>
@@ -1892,16 +1926,23 @@ function homeLinks(){const L=homeLinksGet().filter(x=>x&&x.url);
   if(!L.length)return `<div class="row-actions" style="margin:4px 0 12px"><button class="btn ghost small" data-act="homeLinks">+ Ajouter un lien (Padlet…)</button></div>`;
   return `<section class="card"><div style="display:flex;align-items:center;gap:8px"><h3 style="margin:0;font-size:1.35rem;flex:1">Liens</h3><button class="btn ghost small" data-act="homeLinks">✎ Modifier</button></div>
     <div style="display:flex;gap:22px;flex-wrap:wrap;margin-top:10px">${L.map(x=>`<a href="${esc(/^https?:\/\//.test(x.url)?x.url:"https://"+x.url)}" target="_blank" rel="noopener" style="text-decoration:none;color:inherit;text-align:center;width:120px">
-      <span style="display:flex;align-items:center;justify-content:center;width:112px;height:112px;margin:0 auto;border-radius:50%;background:#F4EEDF;border:3px solid var(--forest,#3D6A4A);box-shadow:0 2px 6px rgba(0,0,0,.12)"><img src="${ICW("obj-nature")}" alt="" style="width:78px;height:auto"></span>
+      <span style="display:flex;align-items:center;justify-content:center;width:112px;height:112px;margin:0 auto;border-radius:50%;background:#F4EEDF;border:3px solid var(--forest,#3D6A4A);box-shadow:0 2px 6px rgba(0,0,0,.12);overflow:hidden"><img src="${esc(linkImgSrc(x))}" alt="" style="${x.ph?"width:100%;height:100%;object-fit:cover":"width:78px;height:auto"}"></span>
       <b style="display:block;margin-top:6px;font-size:1.05rem">${esc(x.t||"Lien")}</b></a>`).join("")}</div></section>`}
-function homeLinksSheet(){const L=homeLinksGet().concat([{}]);const row=x=>`<div class="row hl" style="gap:6px;margin:4px 0"><input class="field" placeholder="Titre (ex. : Padlet sorties nature)" value="${esc(x.t||"")}"><input class="field" placeholder="Adresse (https://…)" inputmode="url" value="${esc(x.url||"")}"></div>`;
-  openSheet(`<h3>Liens utiles</h3><p class="muted small" style="margin:0">Affichés sur la page d'accueil, sur tous vos appareils et ceux de votre collègue.</p><div id="hlL">${L.map(row).join("")}</div><button type="button" class="btn ghost small" id="hlAdd">+ Un lien</button>
+function homeLinksSheet(){const L=homeLinksGet().concat([{}]);
+  const row=x=>`<div class="hl" data-img="${esc(x.img||"")}" style="border-top:1px dashed var(--line);padding:8px 0"><div class="row" style="gap:8px;align-items:center"><button type="button" class="hlimg" title="Choisir l'image" style="flex:none;width:52px;height:52px;border-radius:50%;border:2px solid var(--forest,#3D6A4A);background:#F4EEDF;overflow:hidden;padding:0"><img src="${esc(linkImgSrc(x))}" alt="" style="width:100%;height:100%;object-fit:${x.ph?"cover":"contain"}"></button><input class="field" placeholder="Titre (ex. : Padlet sorties nature)" value="${esc(x.t||"")}"><input class="field" placeholder="Adresse (https://…)" inputmode="url" value="${esc(x.url||"")}"></div>
+    <div class="hlpick" hidden style="margin-top:6px;flex-wrap:wrap;gap:6px">${LINKIMGS.map(n=>`<button type="button" data-li="${n}" style="width:48px;height:48px;border-radius:50%;border:1px solid var(--line);background:#fff;padding:4px"><img src="${ICW(n)}" alt="" style="width:100%;height:100%;object-fit:contain"></button>`).join("")}<label class="btn small" style="align-self:center">📷 Ma photo<input type="file" accept="image/*" hidden class="hlph"></label></div></div>`;
+  openSheet(`<h3>Liens utiles</h3><p class="muted small" style="margin:0">Affichés sur la page d'accueil, sur vos appareils et ceux de votre collègue. Touchez le rond pour choisir l'image.</p><div id="hlL">${L.map(row).join("")}</div><button type="button" class="btn ghost small" id="hlAdd">+ Un lien</button>
     <div class="row-actions"><button class="btn primary" id="hlOk">Enregistrer</button><button class="btn" id="hlNo">Annuler</button></div>`,s=>{
-      s.querySelector("#hlAdd").onclick=()=>s.querySelector("#hlL").insertAdjacentHTML("beforeend",row({}));s.querySelector("#hlNo").onclick=closeSheet;
-      s.querySelector("#hlOk").onclick=async()=>{const liens=[...s.querySelectorAll(".hl")].map(r=>{const i=r.querySelectorAll("input");return {t:i[0].value.trim(),url:i[1].value.trim()}}).filter(x=>x.url);
+      const bind=()=>s.querySelectorAll(".hl").forEach(r=>{if(r.dataset.b)return;r.dataset.b=1;const pk=r.querySelector(".hlpick"),im=r.querySelector(".hlimg img");
+        r.querySelector(".hlimg").onclick=()=>{pk.hidden=!pk.hidden;pk.style.display=pk.hidden?"none":"flex"};
+        pk.querySelectorAll("[data-li]").forEach(b=>b.onclick=()=>{r.dataset.img=b.dataset.li;delete r.dataset.ph;r._ph="";im.src=ICW(b.dataset.li);im.style.objectFit="contain";pk.hidden=true;pk.style.display="none"});
+        const f=r.querySelector(".hlph");f.onchange=async()=>{if(!f.files[0])return;try{const d=await smallPhoto(f.files[0]);r._ph=d;im.src=d;im.style.objectFit="cover";pk.hidden=true;pk.style.display="none"}catch(e){toast("Photo illisible.")}}});
+      bind();const L0=homeLinksGet();s.querySelectorAll(".hl").forEach((r,i)=>{if(L0[i]&&L0[i].ph)r._ph=L0[i].ph});
+      s.querySelector("#hlAdd").onclick=()=>{s.querySelector("#hlL").insertAdjacentHTML("beforeend",row({}));bind()};s.querySelector("#hlNo").onclick=closeSheet;
+      s.querySelector("#hlOk").onclick=async()=>{const liens=[...s.querySelectorAll(".hl")].map(r=>{const i=r.querySelectorAll("input.field");const o={t:i[0].value.trim(),url:i[1].value.trim()};if(r._ph)o.ph=r._ph;else if(r.dataset.img)o.img=r.dataset.img;return o}).filter(x=>x.url);
         try{localStorage.setItem("carnet-liens",JSON.stringify(liens))}catch(e){}if(window.CARNET_LOCAL&&db)await db.doc("config/liens").set({liens});closeSheet();render();toast("Liens enregistrés")}})}
 function grpBar(gid,g){const L=(g.liens||[]).filter(x=>x&&x.url);
-  return `<div class="row-actions" style="margin-top:10px"><button class="btn small" data-act="gInfo" data-id="${gid}">ℹ️ Infos du groupe</button><button class="btn small" data-act="prep" data-id="${gid}">📋 Prochaine rencontre</button>${sample?`<button class="btn small" data-act="retour" data-id="${gid}">✨ Retour de sortie</button>`:""}${L.map(x=>`<a class="btn small" href="${esc(/^https?:\/\//.test(x.url)?x.url:"https://"+x.url)}" target="_blank" rel="noopener" style="text-decoration:none">🔗 ${esc(x.t||"Lien")}</a>`).join("")}${window.CONS?`<button class="btn small" data-cons="group" data-id="${gid}">Consentements</button>`:""}</div>`}
+  return `<div class="row-actions" style="margin-top:10px"><button class="btn small" data-act="gInfo" data-id="${gid}">ℹ️ Infos du groupe</button><button class="btn small" data-act="prep" data-id="${gid}">📋 Prochaine rencontre</button>${sample?`<button class="btn small" data-act="retour" data-id="${gid}">✨ Retour de sortie</button>`:""}${(()=>{const n=remindersOf(gid).length;return n?`<button class="btn ghost small" data-act="gRem" data-id="${gid}" title="Rappels" style="opacity:.75">🔔 ${n}</button>`:""})()}${L.map(x=>`<a class="btn small" href="${esc(/^https?:\/\//.test(x.url)?x.url:"https://"+x.url)}" target="_blank" rel="noopener" style="text-decoration:none">🔗 ${esc(x.t||"Lien")}</a>`).join("")}${window.CONS?`<button class="btn small" data-cons="group" data-id="${gid}">Consentements</button>`:""}</div>`}
 function grpInfoSheet(gid){const g=S.groups.get(gid);if(!g)return;const I=g.infos||{};const C=(I.contacts||[]).filter(x=>x&&(x.nom||x.tel));const L=(g.liens||[]).filter(x=>x&&x.url);
   const al=childrenOf(gid).map(([,c])=>[c.name,(c.infos||{}).allergies]).filter(([,a])=>a&&/^oui/i.test(a));
   const row=(l,v)=>v?`<p style="margin:4px 0"><span class="muted small">${l}</span><br><b>${esc(v)}</b></p>`:"";
@@ -2129,7 +2170,7 @@ function viewChild(cid,secId){ensureRepaired(cid);
       if(hid)hidHTML+=tileHTML;else h+=tileHTML});
     h+=`</div>${hidO.length&&!om?det("hs-"+cid,`Occupations masquées (${hidO.length})`,`<div class="secgrid" style="margin-top:8px">${hidHTML}</div>`):""}</section><section class="card"><div class="secgrid">
       <a class="sectile" href="#e-${cid}--portrait"><img src="${img("roue-medecine")}" alt=""><div><h3>Portrait</h3><div class="meta">Qui il est, objectifs, forces et défis, ce qui marche, rapport</div></div></a></div>
-      <div class="row-actions" style="margin-top:12px"><button class="btn" data-act="exportChild" data-id="${cid}">Exporter la fiche</button></div></section>`;
+      <div class="row-actions" style="margin-top:12px"><button class="btn" data-act="exportChild" data-id="${cid}">Exporter la fiche</button>${(c.trash||[]).length?`<button class="btn ghost small" data-act="trash" data-id="${cid}">Notes supprimées (${c.trash.length})</button>`:""}</div></section>`;
     return h;
   }
   const hf=x=>`#e-${cid}--${x}`;hf.extra=cur=>`<a href="#e-${cid}--portrait" class="${cur==="portrait"?"on":""}"><img src="${img("roue-medecine")}" alt="">Portrait</a>`;
@@ -2526,7 +2567,7 @@ function rowNotes(cid,c,key,noPh){
   const nOpen=openRows.has("n|"+nk)||list.length<=1;
   const head=list.length>1?`<button class="ntog" data-act="toggleRow" data-k="n|${nk}"><span class="car">${nOpen?"▾":"▸"}</span> ${list.length} notes${nOpen?"":` · ${fmtD(list[0].date)} : <span class="nprev">${esc(list[0].text)}</span>`}</button>`:"";
   const rph=noPh?[]:photosOf(c,p=>p.k===key||String(p.k).startsWith(key+".")).sort((a,b)=>(b.d||"").localeCompare(a.d||""));
-  return `<div class="rnotes">${rph.length?`<div class="rphotos"><span class="label">Photos (${rph.length})</span>${thumbs(c,rph,cid)}</div>`:""}${head}${(nOpen?list:[]).map(n=>`<div class="entry"><span class="when">${fmtD(n.date)}</span><span class="txt">${esc(n.text)}${n.from?'<span class="tag">tiré d\'une note sur '+esc(n.from)+'</span>':""}${n.src==="groupe"?'<span class="tag">notes collées</span>':n.src==="terrain"&&!n.ranged?'<span class="tag">terrain · à ranger</span>':""}${byTag(n)}</span><button class="x" aria-label="Supprimer" data-act="delNote" data-id="${cid}" data-n="${n.id}">✕</button></div>`).join("")}
+  return `<div class="rnotes">${rph.length?`<div class="rphotos"><span class="label">Photos (${rph.length})</span>${thumbs(c,rph,cid)}</div>`:""}${head}${(nOpen?list:[]).map(n=>`<div class="entry"><span class="when">${fmtD(n.date)}</span><span class="txt">${esc(n.text)}${n.from?'<span class="tag">tiré d\'une note sur '+esc(n.from)+'</span>':""}${(n.hist||[]).length?`<button class="tag" data-act="noteHist" data-id="${cid}" data-n="${n.id}" style="cursor:pointer;border:0">modifiée</button>`:""}${n.src==="groupe"?'<span class="tag">notes collées</span>':n.src==="terrain"&&!n.ranged?'<span class="tag">terrain · à ranger</span>':""}${byTag(n)}</span><button class="x" aria-label="Supprimer" data-act="delNote" data-id="${cid}" data-n="${n.id}">✕</button></div>`).join("")}
   ${open?`<div class="addnote"><textarea class="field" id="${taId}" data-keep="[data-ta=${taId}][data-act=addRowNote]" placeholder="Note sur ce repère (${fmtD(S.obsDate)})"></textarea><div class="row-actions"><button class="btn primary" data-act="addRowNote" data-id="${cid}" data-k="${key}" data-ta="${taId}">Ajouter</button>${micBtn(taId)}<button class="btn ghost" data-act="toggleNote" data-k="${nk}">Fermer</button></div></div>`:""}</div>`;
 }
 function notesHTML(cid,c,secIds,title,ph){const ids=Array.isArray(secIds)?secIds:[secIds];const secId=ids[0];
@@ -2536,7 +2577,7 @@ function notesHTML(cid,c,secIds,title,ph){const ids=Array.isArray(secIds)?secIds
   const selK=cid+"|"+secId,sel=S.selN===selK;
   return `<section class="card" data-nsec="${selK}"><div class="ordhead"><h3 style="font-size:1.3rem;margin-bottom:8px">${esc(title)}</h3>${list.length>1?`<button class="btn ghost small" data-act="selN" data-k="${selK}">${sel?"Annuler":"Sélectionner"}</button>`:""}</div>${sel?`<div class="hidebar" style="position:static"><span>Cochez les notes à supprimer.</span><button class="btn danger small" data-act="delSelN" data-id="${cid}" data-k="${selK}">Supprimer la sélection</button></div>`:""}${nRep?`<p class="muted small" style="margin:0 0 8px">${nRep} note${nRep>1?"s":""} rangée${nRep>1?"s":""} sous leur repère, plus haut.</p>`:""}${photoBlock}
   <div class="addnote"><textarea class="field" id="note-${secId}" data-keep="[data-act=addNote][data-s=${secId}]" placeholder="${esc(ph)}"></textarea><div class="row-actions"><button class="btn primary" data-act="addNote" data-id="${cid}" data-s="${secId}">Ajouter la note (${fmtD(S.obsDate)})</button>${micBtn("note-"+secId)}</div></div>
-  <div class="entries" style="margin-top:10px">${list.map(n=>`<div class="entry">${sel?`<input type="checkbox" class="nsel" value="${n.id}" aria-label="Choisir cette note">`:""}<span class="when">${fmtD(n.date)}</span><span class="txt">${n.k?`<b class="small">${esc(stepLabel(c,n.k))}</b> · `:""}${esc(n.text)}${n.from?'<span class="tag">tiré d\'une note sur '+esc(n.from)+'</span>':""}${n.src==="groupe"?'<span class="tag">notes collées</span>':n.src==="terrain"&&!n.ranged?'<span class="tag">terrain · à ranger</span>':""}${byTag(n)}</span><button class="x" aria-label="Supprimer" data-act="delNote" data-id="${cid}" data-n="${n.id}">✕</button></div>`).join("")||'<p class="muted small">Aucune note dans cette section.</p>'}</div></section>`;
+  <div class="entries" style="margin-top:10px">${list.map(n=>`<div class="entry">${sel?`<input type="checkbox" class="nsel" value="${n.id}" aria-label="Choisir cette note">`:""}<span class="when">${fmtD(n.date)}</span><span class="txt">${n.k?`<b class="small">${esc(stepLabel(c,n.k))}</b> · `:""}${esc(n.text)}${n.from?'<span class="tag">tiré d\'une note sur '+esc(n.from)+'</span>':""}${(n.hist||[]).length?`<button class="tag" data-act="noteHist" data-id="${cid}" data-n="${n.id}" style="cursor:pointer;border:0">modifiée</button>`:""}${n.src==="groupe"?'<span class="tag">notes collées</span>':n.src==="terrain"&&!n.ranged?'<span class="tag">terrain · à ranger</span>':""}${byTag(n)}</span><button class="x" aria-label="Supprimer" data-act="delNote" data-id="${cid}" data-n="${n.id}">✕</button></div>`).join("")||'<p class="muted small">Aucune note dans cette section.</p>'}</div></section>`;
 }
 
 function viewPortrait(cid,c){
@@ -2611,8 +2652,10 @@ function eclairGroupSheet(gid){const kids=childrenOf(gid).slice().sort((x,y)=>x[
 function notesMenu(gid){const g=S.groups.get(gid);const d=S.obsDate;
   if(sample){const n=iaPending(gid).length;openSheet(`<h3>Notes</h3><p class="small" style="margin:0 0 10px">${n?`<b>${n} note${n>1?"s":""}</b> pas encore rangée${n>1?"s":""} ou corrigée${n>1?"s":""}, toutes dates confondues : notes rapides, notes du terrain, notes des fiches et observations.`:"Toutes les notes sont rangées et corrigées."}</p>
     <div class="row-actions">${iaBtn(gid,true)}<button class="btn" id="nmC">Fermer</button></div>
+    <div style="margin-top:12px;border-top:1px dashed var(--line);padding-top:8px"><p class="small" style="margin:0 0 6px"><b>Notes prises ailleurs</b> <span class="muted">(papier, autre appli) : classez-les avec votre propre IA, sans crédits du carnet.</span></p>
+      <div class="row-actions"><button class="btn small" id="nmIA2">Instructions IA</button><button class="btn small" id="nmImp2">Importer la réponse de l'IA</button></div></div>
     <details style="margin-top:12px"><summary class="small"><b>Reprendre le rangement</b> de notes déjà traitées</summary><p class="small muted" style="margin:4px 0">Repasse les notes des fiches avec les règles actuelles (découpage, copie chez les autres enfants, cases). Rien n'est enregistré avant votre relecture.</p>
-      <div class="row-actions" style="align-items:center"><label class="small">Depuis le <input type="date" class="field" id="nmSince" value="${new Date(Date.now()-30*864e5).toISOString().slice(0,10)}" style="width:auto;display:inline-block"></label><button class="btn small" id="nmRedo">✨ Reprendre</button></div></details>`,s=>{s.querySelector("#nmC").onclick=closeSheet;s.querySelector("#nmRedo").onclick=()=>iaRun(gid,{since:s.querySelector("#nmSince").value||"2000-01-01"})});return}
+      <div class="row-actions" style="align-items:center"><label class="small">Depuis le <input type="date" class="field" id="nmSince" value="${new Date(Date.now()-30*864e5).toISOString().slice(0,10)}" style="width:auto;display:inline-block"></label><button class="btn small" id="nmRedo">✨ Reprendre</button></div></details>`,s=>{s.querySelector("#nmC").onclick=closeSheet;s.querySelector("#nmIA2").onclick=()=>copyText(instrText(gid),"Instructions copiées : collez-les dans votre IA");s.querySelector("#nmImp2").onclick=()=>pasteSheet(gid,S.obsDate||todayISO(),{replace:true});s.querySelector("#nmRedo").onclick=()=>iaRun(gid,{since:s.querySelector("#nmSince").value||"2000-01-01"})});return}
   openSheet(`<h3>Notes</h3><label class="f">Date<input type="date" class="field" id="nmD" value="${d}"></label>
   <div class="nmenu">
    <button class="nmi" id="nmExp"><b>Exporter mes notes du jour</b><span></span></button>
@@ -2769,6 +2812,7 @@ document.addEventListener("click",e=>{
   else if(a==="iaAll")iaRun(id);
   else if(a==="gInfo")grpInfoSheet(id);
   else if(a==="homeLinks")homeLinksSheet();
+  else if(a==="noteHist")noteHistSheet(id,b.dataset.n);else if(a==="trash")trashSheet(id);else if(a==="gOver")groupOverview(id);else if(a==="gRem")remindersSheet(id);
   else if(a==="gObjHide"){mutGroup(id,x=>{x.hideGObj=true});toast("Retiré. Pour le remettre : Modifier le groupe.")}
   else if(a==="scEdit")scSheet(id);
   else if(a==="regG"){S.regG=k;render()}
@@ -3436,7 +3480,7 @@ render();
 if("serviceWorker" in navigator&&location.protocol==="https:")navigator.serviceWorker.register("sw.js").catch(()=>{});
 </script>
 <script>window.SYNC_CFG={"url": "https://lvwotuglgilspssufihp.supabase.co", "key": "sb_publishable_-CD7IcAGCJ9c_bwV7pIhiw_6OZXbFcB"}</script>
-<script src="supabase.js?v=carnet-sync-v20"></script>
-<script src="sync.js?v=carnet-sync-v20"></script>
+<script src="supabase.js?v=carnet-sync-v21"></script>
+<script src="sync.js?v=carnet-sync-v21"></script>
 </body>
 </html>
