@@ -869,10 +869,10 @@ function objAllData(gid,O,only){const g=S.groups.get(gid);const kids=[...S.child
       let ctx="";if(O.ctx){const mc={},fc={};Object.values(o.ctx||{}).forEach(x=>{(x.m||[]).forEach(k=>mc[k]=(mc[k]||0)+1);(x.f||[]).forEach(k=>fc[k]=(fc[k]||0)+1)});const ML=momentsFor(c);const top=(m,lab)=>Object.entries(m).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([k,n])=>lab(k)+(n>1?" ("+n+")":"")).join(", ");
         const a=top(mc,k=>(ML.find(z=>z[0]===k)||MOMENTS.find(z=>z[0]===k)||[k,k])[1]),b=top(fc,k=>{const x=F.find(z=>z[0]===k);return x?shortFac(x[1]):k});ctx=[a?"Moments : "+a:"",b?"Ce qui a aidé : "+b:""].filter(Boolean).join(" · ")}
       const links=O.olinks?(c.notes||[]).filter(n=>n.cobj===o.id).sort((a,b)=>a.date.localeCompare(b.date)).map(n=>fmtD(n.date)+" : "+noteTxt(c,n)):[];
-      return {img:objImg(o),t:objShort(o)+(o.prop?" (proposé)":"")+(o.arch?" (mis de côté)":""),gen:O.gen&&o.gen?o.gen:null,l:o.label!==objShort(o)?o.label:"",done:!!o.done,strat:O.strat?o.strat||"":"",suivi:M.length?`${okN} réussi${okN>1?"s":""} sur ${M.length} rencontre${M.length>1?"s":""} notée${M.length>1?"s":""} · dernière fois le ${fmtD(M[M.length-1][0])}`:"Pas encore noté",ctx,links}});
+      return {fr:objFrise(o),img:objImg(o),t:objShort(o)+(o.prop?" (proposé)":"")+(o.arch?" (mis de côté)":""),gen:O.gen&&o.gen?o.gen:null,l:o.label!==objShort(o)?o.label:"",done:!!o.done,strat:O.strat?o.strat||"":"",suivi:M.length?`${okN} réussi${okN>1?"s":""} sur ${M.length} rencontre${M.length>1?"s":""} notée${M.length>1?"s":""} · dernière fois le ${fmtD(M[M.length-1][0])}`:"Pas encore noté",ctx,links}});
     const pd=meet.filter(d=>(g.presences[d]||[]).includes(cid));
     const notes=O.notes&&!O.occ?(c.notes||[]).filter(n=>n.obs||n.cobj).sort((a,b)=>a.date.localeCompare(b.date)).map(n=>{const o=n.cobj&&all.find(x=>x.id===n.cobj);return {d:n.date,t:noteTxt(c,n),o:o?objShort(o):""}}):[];
-    const phs=O.photos?(c.photos||[]).filter(p=>p.k==="obs"||String(p.k).startsWith("obj:")).sort((a,b)=>(a.d||"").localeCompare(b.d||"")).map(p=>{const o=String(p.k).startsWith("obj:")&&all.find(x=>"obj:"+x.id===p.k);return {id:p.id,d:p.d,o:o?objShort(o):""}}):[];
+    const phs=O.photos?(c.photos||[]).filter(p=>p.k==="obs"||String(p.k).startsWith("obj:")).sort((a,b)=>(a.d||"").localeCompare(b.d||"")).map(p=>{const o=String(p.k).startsWith("obj:")&&all.find(x=>"obj:"+x.id===p.k);return {id:p.id,d:p.d,o:o?objShort(o):"",multi:p.multi}}):[];
     return {cid,occ:O.occ?occData(c):null,newN:O.occ?occNewCount(c):0,phs,name:c.name,pres:O.pres?(meet.length?`${pd.length} sur ${meet.length}`+(pd.length?" ("+pd.map(d=>fmtD(d)).join(", ")+")":""):"Aucune présence notée"):"",notes,ana:O.ana?((c.analyse||{}).text||""):"",anaAsk:!!O.ana,objs,pistes:O.pistes?(c.pistes||[]).filter(n=>!n.done).map(n=>n.text):[],expl:O.expl?(c.explore||[]).map(n=>n.text):[]}})}
 function objAllText(gid,O,only,title){const g=S.groups.get(gid);return `${title} · ${g.name} · ${fmtD(todayISO(),true)}\n\n`+objAllData(gid,O,only).map(k=>{const L=[k.name.toUpperCase()];if(k.pres)L.push("Présences : "+k.pres);
   if(k.notes.length){L.push("","Observations");k.notes.forEach(n=>L.push("- "+fmtD(n.d)+(n.o?" ["+n.o+"]":"")+" : "+n.t))}
@@ -883,9 +883,9 @@ function objAllText(gid,O,only,title){const g=S.groups.get(gid);return `${title}
 function objAllHTML(gid,O,only,title,live){const g=S.groups.get(gid);return `<div class="oxdoc"><h2>${esc(title)}</h2><p class="muted small">${esc(g.name)} · ${fmtD(todayISO(),true)}</p>${objAllData(gid,O,only).map(k=>`<div class="oxk"><h3>${esc(k.name)}</h3>${k.pres?`<p class="oxs"><b>Présences :</b> ${esc(k.pres)}</p>`:""}
   ${k.notes.length?`<h4>Observations</h4><ul class="oxn">${k.notes.map(n=>`<li><b>${fmtD(n.d)}</b>${n.o?` <span class="oxt">${esc(n.o)}</span>`:""} · ${esc(n.t)}</li>`).join("")}</ul>`:""}
   ${k.occ?`<h4>Observations par occupation</h4>${live&&sample?`<div class="row-actions"><button class="btn small primary" data-occsum="${k.cid}">✨ ${k.occ.some(x=>x.res)?"Mettre à jour les résumés"+(k.newN?` (${k.newN} nouvelle${k.newN>1?"s":""} observation${k.newN>1?"s":""})`:""):"Résumer par occupation"}</button></div>`:""}${k.occ.length?k.occ.map(x=>`<div class="occsec"><h5>${esc(x.l)}</h5>${x.res?`<div class="occres" id="occr-${k.cid}-${x.k}">${occResHTML(x.res.t)}</div>${live?`<button class="btn ghost small" data-occed="${k.cid}|${x.k}">Modifier le résumé</button>`:""}`:""}${O.notes&&x.notes.length?(live?`<details class="occobs"${x.res?"":" open"}><summary>Observations (${x.notes.length})</summary>`:"")+`<ul class="oxn">${x.notes.map(n=>`<li><b>${fmtD(n.d)}</b>${n.o?` <span class="oxt">${esc(n.o)}</span>`:""} · ${esc(n.t)}</li>`).join("")}</ul>`+(live?"</details>":""):""}</div>`).join(""):'<p class="muted small">Aucune observation pour l\'instant.</p>'}`:""}
-  ${k.phs.length?`<h4>Photos</h4><div class="oxph">${k.phs.map(p=>`<figure><img src="${blobSrc(p.id)}" data-pid="${p.id}" alt=""><figcaption>${fmtD(p.d)}${p.o?" · "+esc(p.o):""}</figcaption></figure>`).join("")}</div>`:""}
+  ${k.phs.length?`<h4>Photos</h4><div class="oxph">${k.phs.map(p=>`<figure><img src="${blobSrc(p.id)}" data-pid="${p.id}" alt=""><figcaption>${fmtD(p.d)}${p.o?" · "+esc(p.o):""}${p.multi?" · ⚠️ d'autres enfants sur la photo":""}</figcaption></figure>`).join("")}</div>`:""}
   ${k.anaAsk?`<h4>Analyse</h4><p class="oxa">${k.ana?esc(k.ana):'<span class="muted">À rédiger dans la fiche.</span>'}</p>`:""}
-  ${O.pres||O.notes||O.ana?"<h4>Objectifs</h4>":""}${k.objs.length?k.objs.map(o=>`<div class="oxo"><img class="oximg" src="${ICW(o.img)}" alt=""><b>${esc(o.t)}</b>${o.done?' <span class="tag">atteint</span>':""}${o.l?`<div>${esc(o.l)}</div>`:""}${o.strat?`<div class="ostrat">Stratégie : ${esc(o.strat)}</div>`:""}${o.gen&&o.gen.c?`<div class="oxs"><b>En classe :</b> ${esc(o.gen.c)}</div>`:""}${o.gen&&o.gen.m?`<div class="oxs"><b>À la maison :</b> ${esc(o.gen.m)}</div>`:""}<div class="oxs">${esc(o.suivi)}</div>${o.ctx?`<div class="oxs">${esc(o.ctx)}</div>`:""}${o.links.length?`<ul class="oxn">${o.links.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`:""}</div>`).join(""):`<p class="muted small">Aucun objectif pour l'instant.</p>`}
+  ${O.pres||O.notes||O.ana?"<h4>Objectifs</h4>":""}${k.objs.length?k.objs.map(o=>`<div class="oxo"><img class="oximg" src="${ICW(o.img)}" alt=""><b>${esc(o.t)}</b>${o.done?' <span class="tag">atteint</span>':""}${o.l?`<div>${esc(o.l)}</div>`:""}${o.fr||""}${o.strat?`<div class="ostrat">Stratégie : ${esc(o.strat)}</div>`:""}${o.gen&&o.gen.c?`<div class="oxs"><b>En classe :</b> ${esc(o.gen.c)}</div>`:""}${o.gen&&o.gen.m?`<div class="oxs"><b>À la maison :</b> ${esc(o.gen.m)}</div>`:""}<div class="oxs">${esc(o.suivi)}</div>${o.ctx?`<div class="oxs">${esc(o.ctx)}</div>`:""}${o.links.length?`<ul class="oxn">${o.links.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`:""}</div>`).join(""):`<p class="muted small">Aucun objectif pour l'instant.</p>`}
   ${[["pistes","Pistes"],["expl","À explorer"]].filter(([f])=>k[f].length).map(([f,t])=>`<div class="oxx"><b>${t}</b><ul>${k[f].map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>`).join("")}</div>`).join("")}</div>`}
 function objAllSheet(gid,mode,only){mode=mode||"obj";const title=mode==="eval"?"Évaluation et plan d'intervention":"Objectifs des enfants";let O=oxOpts(mode);const draw=s=>{s.querySelector("#oxv").innerHTML=objAllHTML(gid,O,only,title,true);
     s.querySelectorAll("[data-occsum]").forEach(b=>b.onclick=async()=>{b.disabled=true;b.innerHTML='<span class="spinner"></span> Résumé en cours…';try{await occSummarize(b.dataset.occsum,t=>{b.innerHTML='<span class="spinner"></span> '+esc(t)});toast("Résumés prêts : relisez-les")}catch(e){toast(e&&e.code==="rate_limited"?"Trop de demandes. Réessayez dans une minute.":"Le résumé n'a pas fonctionné"+(e&&e.message?" : "+e.message:"."))}draw(s)});
@@ -895,7 +895,7 @@ function objAllSheet(gid,mode,only){mode=mode||"obj";const title=mode==="eval"?"
   const who=only?(S.children.get(only)||{}).name:"";
   openSheet(`<h3>${esc(title)}${who?" · "+esc(who):""}</h3><div class="chips">${OXO.map(([k,l])=>`<label class="chip mini oxc"><input type="checkbox" data-ox="${k}" ${O[k]?"checked":""}> ${l}</label>`).join("")}</div>
   ${mode==="eval"&&sample?`<div class="row-actions" style="align-items:center"><label class="small">Résumés en <select class="field" id="oxFmt" style="width:auto;display:inline-block;padding:4px 8px"><option value="para">paragraphe</option><option value="puces" ${occFmt()==="puces"?"selected":""}>puces</option></select></label>${only?"":`<button class="btn small" id="oxAllSum">✨ Résumer tous les enfants</button>`}<button class="btn small" id="oxSimple">✨ Version en mots simples</button></div>`:""}
-  <div class="row-actions"><button class="btn primary" id="oxCopy">Copier</button><button class="btn" id="oxPrint">Imprimer / PDF</button><button class="btn" id="oxClose">Fermer</button></div><div id="oxv"></div>`,s=>{draw(s);
+  <div class="row-actions">${mode!=="eval"?`<button class="btn" id="oxBank">Banque d'objectifs</button>`:""}<button class="btn primary" id="oxCopy">Copier</button><button class="btn" id="oxPrint">Imprimer / PDF</button><button class="btn" id="oxClose">Fermer</button></div><div id="oxv"></div>`,s=>{draw(s);const obk=s.querySelector("#oxBank");if(obk)obk.onclick=()=>bankSheet(only?S.children.get(only).groupId:gid);
     const fm=s.querySelector("#oxFmt");if(fm)fm.onchange=()=>{try{localStorage.setItem("carnet-occfmt",fm.value)}catch(e){}toast("Les prochains résumés seront en "+(fm.value==="puces"?"puces":"paragraphe"))};
     const al=s.querySelector("#oxAllSum");if(al)al.onclick=async()=>{const L=childrenOf(gid).filter(([,c])=>occNotes(c).length&&(!c.occRes||occNewCount(c)));if(!L.length){toast("Tous les résumés sont à jour.");return}al.disabled=true;let i=0;
       for(const [cid] of L){i++;al.innerHTML=`<span class="spinner"></span> ${i} sur ${L.length}…`;try{await occSummarize(cid,t=>{al.innerHTML=`<span class="spinner"></span> ${i} sur ${L.length} · ${esc(t)}`})}catch(e){toast("Le résumé n'a pas fonctionné pour "+(S.children.get(cid)||{}).name+(e&&e.message?" : "+e.message:""))}if(!document.body.contains(al))return}
@@ -916,8 +916,12 @@ const BANKCATS=[...new Set(BANK.map(b=>b.cat))];
 function bankHTML(){return `<div class="oxdoc"><h2>Banque d'objectifs 5-12 ans</h2><p class="muted small">Chaque objectif avec sa généralisation (classe et maison) et des modalités.</p>${BANKCATS.map(cat=>`<div class="oxk"><h3>${esc(cat)}</h3>${BANK.filter(b=>b.cat===cat).map(b=>`<div class="oxo"><img class="oximg" src="${ICW(objImg({titre:b.t,label:b.l}))}" alt=""><b>${esc(b.t)}</b><div>${esc(b.l)}</div><div class="oxs"><b>En classe :</b> ${esc(b.c)}</div><div class="oxs"><b>À la maison :</b> ${esc(b.m)}</div><div class="oxs"><b>Modalités :</b> ${esc(b.mod)}</div></div>`).join("")}</div>`).join("")}</div>`}
 function bankText(){return "Banque d'objectifs 5-12 ans\n\n"+BANKCATS.map(cat=>cat.toUpperCase()+"\n"+BANK.filter(b=>b.cat===cat).map(b=>`• ${b.t}\n  ${b.l}\n  En classe : ${b.c}\n  À la maison : ${b.m}\n  Modalités : ${b.mod}`).join("\n")).join("\n\n")}
 function printHTML(html){let d=document.getElementById("prt");if(!d){d=document.createElement("div");d.id="prt";document.body.appendChild(d)}d.innerHTML=html;document.body.classList.add("printing");const done=()=>{document.body.classList.remove("printing");d.innerHTML="";window.removeEventListener("afterprint",done)};window.addEventListener("afterprint",done);setTimeout(()=>{window.print();setTimeout(()=>{if(document.body.classList.contains("printing")&&!matchMedia("print").matches)done()},1500)},50)}
-function bankSheet(){openSheet(`<h3>Banque d'objectifs</h3><p class="muted small" style="margin:0">${BANK.length} objectifs, classés par catégorie. Touchez une catégorie pour l'ouvrir.</p><div class="row-actions"><button class="btn primary" id="bkCopy">Copier</button><button class="btn" id="bkPrint">Imprimer / PDF</button><button class="btn" id="bkClose">Fermer</button></div>
-  ${BANKCATS.map(cat=>`<details class="bkcat"><summary>${esc(cat)} (${BANK.filter(b=>b.cat===cat).length})</summary>${BANK.filter(b=>b.cat===cat).map(b=>`<div class="bko"><img class="oximg" src="${ICW(objImg({titre:b.t,label:b.l}))}" alt=""><b>${esc(b.t)}</b><div>${esc(b.l)}</div><details class="ogen"><summary>Généralisation et modalités</summary><p><b>En classe :</b> ${esc(b.c)}</p><p><b>À la maison :</b> ${esc(b.m)}</p><p><b>Modalités :</b> ${esc(b.mod)}</p></details></div>`).join("")}</details>`).join("")}`,s=>{s.querySelector("#bkClose").onclick=closeSheet;s.querySelector("#bkCopy").onclick=()=>copyText(bankText(),"Banque copiée");s.querySelector("#bkPrint").onclick=()=>printHTML(bankHTML())})}
+function bankSheet(gid){openSheet(`<h3>Banque d'objectifs</h3><p class="muted small" style="margin:0">${BANK.length} objectifs, classés par catégorie. Touchez une catégorie pour l'ouvrir.</p><div class="row-actions"><button class="btn primary" id="bkCopy">Copier</button><button class="btn" id="bkPrint">Imprimer / PDF</button><button class="btn" id="bkClose">Fermer</button></div>
+  ${BANKCATS.map(cat=>`<details class="bkcat"><summary>${esc(cat)} (${BANK.filter(b=>b.cat===cat).length})</summary>${BANK.filter(b=>b.cat===cat).map(b=>`<div class="bko"><label class="chk small" style="float:right;margin-left:8px"><input type="checkbox" data-bkn="${b.n}"> Choisir</label><img class="oximg" src="${ICW(objImg({titre:b.t,label:b.l}))}" alt=""><b>${esc(b.t)}</b><div>${esc(b.l)}</div><details class="ogen"><summary>Généralisation et modalités</summary><p><b>En classe :</b> ${esc(b.c)}</p><p><b>À la maison :</b> ${esc(b.m)}</p><p><b>Modalités :</b> ${esc(b.mod)}</p></details></div>`).join("")}</details>`).join("")}${bankPickHTML(gid)}`,s=>{s.querySelector("#bkClose").onclick=closeSheet;
+    const upd=()=>{const n=s.querySelectorAll("[data-bkn]:checked").length;const b=s.querySelector("#bkAdd");b.disabled=!n||!s.querySelector("#bkKid").value;b.textContent=n?`Ajouter ${n} objectif${n>1?"s":""} à la fiche`:"Ajouter à la fiche"};
+    s.querySelectorAll("[data-bkn]").forEach(c=>c.onchange=upd);s.querySelector("#bkKid").onchange=upd;
+    s.querySelector("#bkAdd").onclick=()=>{const cid=s.querySelector("#bkKid").value;const nums=[...s.querySelectorAll("[data-bkn]:checked")].map(c=>c.dataset.bkn);const r=bankAdd(cid,nums);const c=S.children.get(cid);
+      s.querySelectorAll("[data-bkn]:checked").forEach(c=>c.checked=false);upd();toast(`${r.n} objectif${r.n>1?"s":""} ajouté${r.n>1?"s":""} à ${c.name}${r.act>3?` · ${r.act} objectifs actifs (on vise 2 ou 3)`:""}`)};s.querySelector("#bkCopy").onclick=()=>copyText(bankText(),"Banque copiée");s.querySelector("#bkPrint").onclick=()=>printHTML(bankHTML())})}
 const NCATS=[["social","Habiletés sociales"],["jeu","Jeu et engagement"],["comm","Langage et communication"],["regul","Régulation émotionnelle"],["trans","Transitions"],["sens","Sensoriel"],["moteur","Motricité et autonomie"],["suivi","Suivi et besoins"],["autre","Autres"]];
 function noteCat(n){if(n.cat)return n.cat;const raw=String(n.text||"");const head=norm(raw.split(":")[0].slice(0,60));const t=norm(raw);
   const R=[["suivi",/(suivi|faim|optom|psychoed|famille|sa mere|rose|toilettes|besoin)/],["trans",/(transition|transport|arrivee|depart|vanne|camionnette|retour|changement|vehicule|debarqu)/],["regul",/(regulation|colere|fache|pleure|frustr|calme|apais|bougon|emotion|crie|anxi|isole|douleur|resilien)/],["sens",/(sensori|bruit|musique|chaud|coquille|vestibul)/],["social",/(social|pair|enfants|cooper|collabor|partag|tour|conflit|frere|ami|invite|leadership|mobilise|empathie|relation|joueavec)/],["comm",/(langage|communication|parole|parle|exprime|francais|anglais|verbalis|rassemblement)/],["moteur",/(motric|habill|manteau|noeud|econome|scie|marteau|graphisme|ecri|balancoire|hamac|verse|autonom|outil|securit)/],["jeu",/(jeu|bricolage|construction|activite|engag|creati|projet|cachette|tague|explor|attention|apprentissage)/]];
@@ -1084,7 +1088,7 @@ function renderInner(){
   else html+=viewChild(r.cid,r.sec);
   const keep={};main.querySelectorAll("textarea[id],input[id]:not([type=date])").forEach(el=>{if(el.value&&!el.dataset.act)keep[el.id]=el.value});
   const fg=r.gid||(r.cid&&S.children.get(r.cid)?S.children.get(r.cid).groupId:null);
-  if(fg&&(r.v==="group"||r.v==="terrain")){const ib=inboxHTML(fg);if(ib){const i=html.indexOf("</section>");html=i>0?html.slice(0,i+10)+ib+html.slice(i+10):ib+html}}
+  if(fg&&(r.v==="group"||r.v==="terrain")){const ib=prepCardHTML(fg)+inboxHTML(fg)+phInboxHTML(fg);if(ib){const i=html.indexOf("</section>");html=i>0?html.slice(0,i+10)+ib+html.slice(i+10):ib+html}}
   main.innerHTML=html;if(r.v==="settings")setTimeout(storeInfo,0);
   let fab=document.getElementById("fab");if(!fab){fab=document.createElement("button");fab.id="fab";fab.className="fab";fab.innerHTML=MIC+"<span>Note rapide</span>";fab.setAttribute("aria-label","Note rapide à classer plus tard");document.body.appendChild(fab);fab.onclick=()=>{const rr=route();const g2=rr.gid||(rr.cid&&S.children.get(rr.cid)?S.children.get(rr.cid).groupId:null);if(g2)quickNote(g2,rr.cid||null)}}
   fab.style.display=fg&&r.v!=="settings"?"":"none";tmInit();const tf=document.getElementById("tmfab");if(tf)tf.style.display=fg&&r.v!=="settings"&&!TM.open?"":"none";
@@ -1098,7 +1102,7 @@ function viewHome(){
   let h=`<section class="card"><h2 style="font-size:1.6rem;margin-bottom:4px">Mes groupes</h2><p class="muted small" style="margin:0 0 12px">Choisissez un groupe pour voir les enfants et leurs fiches.</p><div class="grid">`;
   gs.forEach(([id,g])=>{const n=[...S.children.values()].filter(c=>c.groupId===id).length;const em=EMBLEMS[g.emblem]||EMBLEMS.roue;
     h+=`<a class="tile" href="#g-${id}"><img src="${img(em.img)}" alt=""><h3>${esc(g.name)}</h3><span class="meta">Fiche ${esc(tpl(g).nom)} · ${n} enfant${n>1?"s":""}</span></a>`});
-  h+=`<button class="tile add" data-act="newGroup"><span class="plus">+</span>Nouveau groupe</button></div></section>`;
+  h+=`<button class="tile add" data-act="newGroup"><span class="plus">+</span>Nouveau groupe</button></div>${homeLinks()}</section>`;
   if(window.SYNC)h+=SYNC.card();
   if(window.CARNET_LOCAL){const ba=LOCAL.meta.backupAt;h+=`<section class="card"><details class="ogdet" data-dk="backup" ${openDetails.has("backup")?"open":""}><summary><h3 style="font-size:1.35rem;display:inline">Sauvegarde et partage</h3> <span class="muted small">${ba?"dernière : "+fmtD(String(ba).slice(0,10)):"aucune encore"}</span></summary><p class="muted small" style="margin:2px 0 10px">Le carnet garde tout sur cet appareil, sans rien envoyer en ligne. Sauvegardez régulièrement et gardez le fichier en lieu sûr. Pour travailler à deux : envoyez votre sauvegarde à votre collègue, qui la <b>fusionne</b> avec son carnet. ${ba?"Dernière sauvegarde : "+fmtD(ba,true)+".":"Aucune sauvegarde pour l'instant."}</p>
   <div class="row-actions"><button class="btn primary" data-act="backupLight">Sauvegarde texte</button><button class="btn" data-act="backupPh">Sauvegarde des photos${(()=>{const n=newPhotoCount();return n?" ("+n+" nouvelle"+(n>1?"s":"")+")":""})()}</button><button class="btn ghost small" data-act="backup">Tout en un fichier</button></div>
@@ -1198,14 +1202,14 @@ function viewTerrain(gid){const g=S.groups.get(gid);if(!g){go("accueil");return 
   ${pr.length?`<label class="chk" style="margin-top:6px"><input type="checkbox" data-act="tOnly" ${only?"checked":""}> Présents seulement (${pr.length})</label>`:`<p class="muted small" style="margin:6px 0 0">Touchez un enfant pour noter : il sera marqué présent.</p>`}</section>
   <div class="tgrid">${kids.map(([cid,c])=>{const done=dayTouched(c,d);const ao=aObserver(c);const isP=pr.includes(cid);
     return `<button class="tkid${done?" done":""}${pr.length&&!isP?" abs":""}" data-act="tKid" data-id="${gid}" data-c="${cid}"><span class="tav"><img src="${avSrc(c)}"${avAt(c)} alt="">${done?`<i class="ok">✓</i>`:`<i class="todo"></i>`}</span><b>${starH(c)}${esc(c.name)}</b><span class="tao">${ao.slice(0,2).map(x=>`<span class="${x.t}">${AOI[x.t]} ${esc(x.label.length>48?x.label.slice(0,46)+"…":x.label)}</span>`).join("")}</span></button>`}).join("")}</div>
-  <section class="card"><div class="row-actions"><button class="btn primary" data-act="tBilan" data-id="${gid}">Bilan de la journée</button><button class="btn" data-act="gInfo" data-id="${gid}">ℹ️ Infos du groupe</button>${sample?iaBtn(gid):`<button class="btn" data-act="expDay" data-id="${gid}">Exporter mes notes du jour</button>`}<a class="btn ghost" href="#g-${gid}">Page du groupe</a></div>
+  <section class="card"><div class="row-actions"><button class="btn primary" data-act="tBilan" data-id="${gid}">Bilan de la journée</button><button class="btn" data-act="gInfo" data-id="${gid}">ℹ️ Infos du groupe</button>${sample?`<button class="btn" data-act="retour" data-id="${gid}">✨ Retour de sortie</button>`:""}<button class="btn" data-act="prep" data-id="${gid}">📋 Prochaine rencontre</button>${sample?iaBtn(gid):`<button class="btn" data-act="expDay" data-id="${gid}">Exporter mes notes du jour</button>`}<a class="btn ghost" href="#g-${gid}">Page du groupe</a></div>
   <p class="muted small" style="margin:6px 0 0">✓ = déjà noté aujourd'hui · point orange = rien encore.</p></section>`;
   return h}
 function terrainKid(gid,cid){const g=S.groups.get(gid);const c=S.children.get(cid);const d=S.obsDate;if(!c)return;
   const objs=childObjs(c).filter(o=>!o.done);const gobjs=g.objectifs||[];const res=objRes(g,d);const ao=[];
   const notesT=(c.notes||[]).filter(n=>n.date===d);const phT=photosOf(c,p=>p.d===d);
   const tri=isObjOnly(c);const mk=(v,cur,attrs)=>v==="ok"?`<button class="tm odot ${cur||"vide"}" ${attrs} data-cyc="1" aria-label="Changer le niveau">${cur?omk(cur):""}</button>`:"";
-  openSheet(`<div class="thead"><img src="${avSrc(c)}"${avAt(c)} alt=""><div><h3 style="margin:0">${starH(c)}${esc(c.name)}</h3><span class="muted small">${esc(fmtD(d,true))}</span></div></div>
+  openSheet(`<div class="thead"><img src="${avSrc(c)}"${avAt(c)} alt=""><div><h3 style="margin:0">${starH(c)}${esc(c.name)}</h3><span class="muted small">${esc(fmtD(d,true))}</span></div></div>${(()=>{const t=((g.prochaine||{}).enfants||{})[cid];return t?`<div class="notice small" style="margin:6px 0">📋 ${esc(t)}</div>`:""})()}
   ${objs.length||gobjs.length?`<div class="tobjs">${objs.map(o=>{const v=(o.marks||{})[d]||"";return `<div class="tobj"><span title="${esc(o.label)}">🎯 ${esc(objShort(o))}</span>${mk("ok",v,`data-co="${o.id}"`)}${mk("no",v,`data-co="${o.id}"`)}</div>${tri?objCtxHTML(cid,c,o,d,'data-ctx="1"'):""}`}).join("")}
     ${gobjs.map(o=>{const v=(res[o.id]||{})[cid]||"";return `<div class="tobj grp"><span>${esc(o.label)} <span class="muted small">(groupe)</span></span>${mk("ok",v,`data-go="${o.id}"`)}${mk("no",v,`data-go="${o.id}"`)}</div>`}).join("")}</div>`:""}
   ${ao.length?`<div class="small">${ao.map(x=>`<div>${AOI[x.t]} ${esc(x.label)}${x.t==="occ"?(x.since?` <span class="muted">(dernière fois ${fmtD(x.since)})</span>`:` <span class="muted">(jamais)</span>`):""}</div>`).join("")}</div>`:""}
@@ -1240,27 +1244,30 @@ function terrainRanger(gid){const d=S.obsDate;const lines=[];childrenOf(gid).for
   if(!lines.length){toast("Aucune note du terrain à ranger pour cette date.");return}
   pasteSheet(gid,d,{prefill:lines.join("\n"),terrain:true})}
 /* ---------- IA : tout ranger et corriger (une seule passe, toutes dates) ---------- */
-function iaPending(gid){const g=S.groups.get(gid);if(!g)return [];const out=[];
-  (g.inbox||[]).forEach(q=>{if(String(q.text||"").trim())out.push({kind:"q",id:q.id,date:q.date,text:q.text,kids:q.kids||[]})});
+function iaPending(gid,since){const g=S.groups.get(gid);if(!g)return [];const out=[];const redo=n=>since&&String(n.date||"")>=since;
+  if(!since)(g.inbox||[]).forEach(q=>{if(String(q.text||"").trim())out.push({kind:"q",id:q.id,date:q.date,text:q.text,kids:q.kids||[],by:q.by})});
   childrenOf(gid).forEach(([cid,c])=>{
-    (c.notes||[]).forEach(n=>{if(!n.clean&&String(n.text||"").trim())out.push({kind:"n",cid,id:n.id,date:n.date,text:n.text,dest0:iaCur(c,n)})});
+    (c.notes||[]).forEach(n=>{if((since?redo(n):!n.clean)&&String(n.text||"").trim())out.push({kind:"n",cid,id:n.id,date:n.date,text:n.text,dest0:iaCur(c,n),by:n.by})});
+    if(since)return;
     Object.entries(c.free||{}).forEach(([k,l])=>(l||[]).forEach(n=>{if(!n.clean&&String(n.text||"").trim())out.push({kind:"f",cid,k,id:n.id,date:n.date,text:n.text})}));
     (c.explore||[]).forEach(n=>{if(!n.clean&&String(n.text||"").trim())out.push({kind:"x",cid,id:n.id,date:n.date,text:n.text})})});
   return out}
 function iaCur(c,n){if(isObjOnly(c))return n.cobj&&childObjs(c).some(o=>o.id===n.cobj)?n.cobj:"cat:"+noteCat(n);return n.k||n.section||"portrait"}
 function iaDests(c){if(!c)return [];if(isObjOnly(c))return childObjs(c).map(o=>[o.id,"🎯 "+objShort(o)]).concat(NCATS.map(([k,l])=>["cat:"+k,"Autres observations · "+l]));
-  const T=tpl(S.groups.get(c.groupId));return [["portrait","Portrait"]].concat(T.sections.flatMap(x=>[[x.id,x.titre+" (général)"]].concat(x.rows.filter(r=>!r.free).map(r=>[x.id+"."+r.id,x.titre+" › "+r.label]))))}
+  const T=tpl(S.groups.get(c.groupId));return [["portrait","Portrait (général)"]].concat(T.sections.flatMap(x=>[[x.id,x.titre+" (général)"]].concat(x.rows.filter(r=>!r.free).map(r=>[x.id+"."+r.id,x.titre+" › "+r.label]))))}
+function iaCases(g){const T=tpl(g);return T.sections.flatMap(x=>x.rows.filter(r=>!r.free&&(r.steps||[]).length).map(r=>`${x.id}.${r.id} : ${(r.steps||[]).map((st,i)=>x.id+"."+r.id+"."+stK(st,i)+"="+stT(st)).join(" ; ")}`)).join("\n")}
 function iaPrompt(gid,chunk){const g=S.groups.get(gid);const kids=childrenOf(gid);const nm=cid=>(S.children.get(cid)||{}).name||"?";
-  const obj=tpl(g).objOnly;const hasQ=chunk.some(it=>it.kind==="q");
-  const who=new Set(chunk.filter(it=>it.cid).map(it=>it.cid));if(hasQ)kids.forEach(([k])=>who.add(k));
+  const obj=tpl(g).objOnly;
+  const who=new Set(chunk.filter(it=>it.cid).map(it=>it.cid));kids.forEach(([k])=>who.add(k));
   const codes=obj?[...who].map(cid=>{const c=S.children.get(cid);return `${c.name} : ${iaDests(c).map(([k,l])=>k+" = "+l.replace("🎯 ","objectif : ")).join(" | ")}`}).join("\n")
-    :`Codes communs à tous les enfants : ${iaDests(kids[0]&&kids[0][1]).map(([k,l])=>k+" = "+l).join(" | ")}\nEnfants : ${kids.map(([,c])=>c.name).join(", ")}`;
+    :`Codes de rangement communs à tous les enfants : ${iaDests(kids[0]&&kids[0][1]).map(([k,l])=>k+" = "+l).join(" | ")}\nEnfants : ${kids.map(([,c])=>c.name).join(", ")}\n\nCASES À COCHER (code=repère) :\n${iaCases(g)}`;
   const lab={n:"N",f:"F",x:"X",q:"Q"};
   return `Tu aides une ergothérapeute à mettre de l'ordre dans ses notes d'observation de classe nature (groupe ${g.name}). Pour CHAQUE note étiquetée :
-1. RÉÉCRIS-LA selon les consignes de rédaction : reformule en langage clinique juste et descriptif (pas seulement l'orthographe), sans hésitations (euh, pis…) ni répétitions, sans titre au début. Garde TOUS les faits, le sens et les mots de l'enfant entre guillemets. N'ajoute rien, n'interprète pas, ne résume pas. Renvoie-la identique seulement si elle respecte déjà toutes les consignes.
-2. RANGE-LA (notes N et Q seulement) : choisis "dest" parmi les codes de l'enfant ci-dessous. Si la note a déjà un rangement (« actuel »), garde-le, sauf si un objectif de l'enfant correspond clairement mieux. Sinon, prends la catégorie la plus juste${obj?"":" ou « portrait »"}.
-Les notes [Q…] sont des notes rapides : trouve le ou les enfants concernés (les prénoms peuvent être mal écrits ou mal dictés : prends le bon prénom de la liste) et fais un extrait par enfant, rédigé pour lui. Si un enfant est déjà indiqué, il est concerné.
-Les notes [F…] et [X…] : corrige seulement.
+1. RÉÉCRIS-LA selon les consignes de rédaction : reformule en langage clinique juste et descriptif (pas seulement l'orthographe), sans hésitations (euh, pis…) ni répétitions, sans titre au début. Garde TOUS les faits, le sens et les mots de l'enfant entre guillemets. N'ajoute rien, n'interprète pas, ne résume pas.
+2. RANGE-LA : choisis "dest" parmi les codes de l'enfant. ${obj?"Si la note a déjà un objectif (« actuel »), garde-le, sauf si un autre objectif de l'enfant correspond clairement mieux ; sinon prends la catégorie la plus juste.":"« portrait » veut dire « pas encore rangé » : choisis toujours l'occupation et le repère les plus justes (ex. une difficulté de transition va dans la transition, un jeu de construction dans le jeu, un comportement agressif dans la régulation ou les interactions). Garde « portrait » seulement pour une observation vraiment générale."}
+3. DÉCOUPE au besoin : si une note touche plusieurs domaines bien distincts, fais un extrait par domaine (chacun rangé à sa place). Si elle décrit clairement aussi un AUTRE enfant de la liste (collaboration, jeu ensemble, conflit), ajoute un extrait rédigé pour cet autre enfant (son prénom dans "enfant"), avec seulement ce qui le concerne.
+4. ${obj?"NIVEAU : si un extrait est rangé dans un objectif et montre clairement le niveau observé, indique \"niveau\" : \"ok\" (réussi), \"prog\" (en progrès) ou \"no\" (pas encore). En cas de doute, n'en mets pas.":"CASES : liste dans \"cases\" les codes des repères clairement RÉUSSIS dans l'extrait (liste CASES À COCHER). En cas de doute, n'en mets pas."}
+Les notes [Q…] sont des notes rapides : trouve le ou les enfants concernés (les prénoms peuvent être mal écrits ou mal dictés : prends le bon prénom de la liste). Les notes [F…] et [X…] : réécris seulement.
 
 ENFANTS ET CODES DE RANGEMENT
 ${codes}
@@ -1268,11 +1275,11 @@ ${codes}
 NOTES
 ${chunk.map(it=>`[${lab[it.kind]}${it.n}] ${it.kind==="q"?(it.kids.length?"enfants indiqués : "+it.kids.map(nm).join(", "):"enfant à trouver"):nm(it.cid)+(it.kind==="n"?" · actuel : "+it.dest0:"")} · ${it.date||""} : ${it.text}`).join("\n")}
 
-Réponds seulement en JSON : {"N1":{"texte":"…","dest":"code"},"F2":{"texte":"…"},"Q3":[{"enfant":"Prénom","texte":"…","dest":"code"}]}`}
-async function iaRun(gid){if(!sample){toast("L'IA n'est pas activée.");return}
-  const all=iaPending(gid);if(!all.length){toast("Tout est déjà rangé et corrigé.");return}
+Réponds seulement en JSON. Pour N et Q, une LISTE d'extraits ; le premier extrait d'une note N est pour l'enfant de la note. Ex. : {"N1":[{"enfant":"Prénom","texte":"…","dest":"code","cases":["code"]${obj?',"niveau":"ok"':""}}],"F2":{"texte":"…"},"Q3":[{"enfant":"Prénom","texte":"…","dest":"code"}]}`}
+async function iaRun(gid,opt){if(!sample){toast("L'IA n'est pas activée.");return}opt=opt||{};
+  const all=iaPending(gid,opt.since);if(!all.length){toast(opt.since?"Aucune note depuis cette date.":"Tout est déjà rangé et corrigé.");return}
   all.forEach((it,i)=>it.n=i+1);
-  const chunks=[];let cur=[],len=0;all.forEach(it=>{if(cur.length>=12||len>3500){chunks.push(cur);cur=[];len=0}cur.push(it);len+=it.text.length});if(cur.length)chunks.push(cur);
+  const chunks=[];let cur=[],len=0;all.forEach(it=>{if(cur.length>=10||len>3000){chunks.push(cur);cur=[];len=0}cur.push(it);len+=it.text.length});if(cur.length)chunks.push(cur);
   let stop=false;
   openSheet(`<h3>Tout ranger et corriger</h3><p id="iaProg"><span class="spinner" style="border-color:rgba(0,0,0,.2);border-top-color:var(--forest)"></span> ${all.length} note${all.length>1?"s":""} en lecture…</p><p class="muted small">Les prénoms sont remplacés par des codes avant l'envoi. Rien n'est enregistré avant votre relecture.</p><div class="row-actions"><button class="btn" id="iaStop">Annuler</button></div>`,s=>{s.querySelector("#iaStop").onclick=()=>{stop=true;closeSheet()}});
   const res={};
@@ -1281,32 +1288,44 @@ async function iaRun(gid){if(!sample){toast("L'IA n'est pas activée.");return}
   if(stop)return;out.forEach(x=>{if(x.ok&&x.v)Object.assign(res,x.v)});const bad=out.filter(x=>!x.ok);
   if(!Object.keys(res).length){closeSheet();const e=(bad[0]||{}).e;toast(e&&e.code==="rate_limited"?"Trop de demandes. Réessayez dans une minute.":"La lecture n'a pas fonctionné"+(e&&e.message?" : "+e.message:"."));return}
   if(bad.length)toast(`${bad.length} lot${bad.length>1?"s":""} sur ${chunks.length} n'${bad.length>1?"ont":"a"} pas fonctionné : ces notes reviendront la prochaine fois.`);
-  iaReview(gid,all,res)}
+  iaReview(gid,all,res,opt)}
 function iaKid(gid,name){const n=norm(String(name||""));if(!n)return "";const L=childrenOf(gid);const hit=L.find(([,c])=>kidNames(c).some(k=>norm(k)===n))||L.find(([,c])=>kidNames(c).some(k=>norm(k).startsWith(n)||n.startsWith(norm(k))));return hit?hit[0]:""}
-function iaReview(gid,all,res){const lab={n:"N",f:"F",x:"X",q:"Q"};const rows=[],auto=[];
+function iaOkDest(cid,d){return iaDests(S.children.get(cid)).some(x=>x[0]===d)}
+function iaCaseOk(cid,k){const c=S.children.get(cid);return !!(c&&!isObjOnly(c)&&k&&stepLabel(c,k))}
+function iaReview(gid,all,res,opt){const lab={n:"N",f:"F",x:"X",q:"Q"};const rows=[],auto=[];opt=opt||{};
+  const ext=(x,cid)=>{const cases=(Array.isArray(x.cases)?x.cases:[]).map(String).filter(k=>iaCaseOk(cid,k));const nv=["ok","prog","no"].includes(x.niveau)?x.niveau:"";return {cases,nv}};
   all.forEach(it=>{const r=res[lab[it.kind]+it.n];
     if(it.kind==="q"){const L=Array.isArray(r)?r:r&&typeof r==="object"?[r]:[];
-      if(!L.length)rows.push({it,cid:it.kids[0]||"",after:it.text,dest:""});
-      L.forEach(x=>{const cid=iaKid(gid,x.enfant)||(it.kids.length===1?it.kids[0]:"");rows.push({it,cid,after:String(x.texte||it.text).trim(),dest:String(x.dest||"")})});return}
-    if(!r){return}
-    const after=String((typeof r==="string"?r:r.texte)||it.text).trim();const c=S.children.get(it.cid);
-    let dest=it.kind==="n"&&r.dest&&iaDests(c).some(d=>d[0]===r.dest)?r.dest:it.dest0;
-    if(after===it.text.trim()&&dest===it.dest0)auto.push(it);else rows.push({it,cid:it.cid,after,dest})});
-  rows.forEach(r=>{if(r.it.kind==="q"&&r.cid&&!iaDests(S.children.get(r.cid)).some(d=>d[0]===r.dest))r.dest=iaDests(S.children.get(r.cid))[0]?.[0]||""});
+      if(!L.length)rows.push({it,role:"q",cid:it.kids[0]||"",after:it.text,dest:"",cases:[],nv:""});
+      L.forEach(x=>{const cid=iaKid(gid,x.enfant)||(it.kids.length===1?it.kids[0]:"");const e=ext(x,cid);rows.push(Object.assign({it,role:"q",cid,after:String(x.texte||it.text).trim(),dest:String(x.dest||"")},e))});return}
+    if(!r)return;
+    if(it.kind!=="n"){const after=String((typeof r==="string"?r:(Array.isArray(r)?(r[0]||{}).texte:r.texte))||it.text).trim();if(after===it.text.trim())auto.push(it);else rows.push({it,role:"main",cid:it.cid,after,dest:"",cases:[],nv:""});return}
+    const L=(Array.isArray(r)?r:[r]).filter(x=>x&&typeof x==="object"&&String(x.texte||"").trim());
+    let mi=L.findIndex(x=>!x.enfant||iaKid(gid,x.enfant)===it.cid);
+    const main=mi>=0?L[mi]:{texte:it.text,dest:it.dest0};const me=ext(main,it.cid);
+    const after=String(main.texte).trim();const dest=main.dest&&iaOkDest(it.cid,main.dest)?main.dest:it.dest0;
+    const extra=L.filter((x,i)=>i!==mi);
+    if(after===it.text.trim()&&dest===it.dest0&&!extra.length&&!me.cases.length&&!me.nv)auto.push(it);
+    else rows.push(Object.assign({it,role:"main",cid:it.cid,after,dest},me));
+    extra.forEach(x=>{const cid=iaKid(gid,x.enfant)||it.cid;const e=ext(x,cid);rows.push(Object.assign({it,role:cid===it.cid?"split":"copy",cid,after:String(x.texte).trim(),dest:String(x.dest||"")},e))})});
+  rows.forEach(r=>{if((r.role!=="main")&&r.cid&&!iaOkDest(r.cid,r.dest))r.dest=iaDests(S.children.get(r.cid))[0]?.[0]||""});
   const nm=cid=>(S.children.get(cid)||{}).name||"";
   const order=rows.map((r,i)=>i).sort((a,b)=>(nm(rows[a].cid)||"~").localeCompare(nm(rows[b].cid)||"~","fr")||String(rows[a].it.date||"").localeCompare(String(rows[b].it.date||"")));
   const kids=childrenOf(gid);const where={n:"",f:"Portrait",x:"À explorer",q:"Note rapide"};
-  const destSel=(i,cid,val)=>{const D=iaDests(S.children.get(cid));return D.length?`<select class="field" id="iad${i}" style="margin-top:4px">${D.map(([k,l])=>`<option value="${esc(k)}" ${k===val?"selected":""}>${esc(l)}</option>`).join("")}</select>`:""};
-  if(!rows.length){iaSave(gid,[],auto,null);return}
+  const destSel=(i,cid,val)=>{const D=iaDests(S.children.get(cid));return D.length?`<select class="field" id="iad${i}" style="margin-top:4px;width:100%;max-width:100%">${D.map(([k,l])=>`<option value="${esc(k)}" ${k===val?"selected":""}>${esc(l)}</option>`).join("")}</select>`:""};
+  const extrasHTML=(i,r)=>{const c=S.children.get(r.cid);if(!c)return "";if(isObjOnly(c))return `<span id="iavw${i}"><label class="small" style="display:block;margin-top:4px">Niveau pour l'objectif <select class="field" id="iav${i}" style="width:auto;display:inline-block;padding:4px 8px"><option value="">—</option>${[["ok","réussi"],["prog","en progrès"],["no","pas encore"]].map(([k,l])=>`<option value="${k}" ${r.nv===k?"selected":""}>${l}</option>`).join("")}</select></label></span>`;
+    return r.cases.length?`<div class="small" style="margin-top:4px">${r.cases.map(k=>`<label class="chk" style="display:block"><input type="checkbox" data-iacs="${i}" value="${esc(k)}" checked> Cocher : ${esc(stepLabel(c,k))}</label>`).join("")}</div>`:""};
+  const roleTxt=r=>r.role==="split"?"✂️ morceau séparé":r.role==="copy"?`📎 tiré d'une note sur ${esc(nm(r.it.cid))}`:"";
+  if(!rows.length){iaSave(gid,[],auto);return}
   let last=null;
-  openSheet(`<h3>Relire avant d'enregistrer</h3><p class="muted small" style="margin:0">${rows.length} note${rows.length>1?"s":""} à relire${auto.length?` · ${auto.length} déjà correcte${auto.length>1?"s":""} (marquée${auto.length>1?"s":""} comme traitée${auto.length>1?"s":""})`:""}. Décochez ce que vous ne voulez pas appliquer : la note restera telle quelle.</p>
+  openSheet(`<h3>Relire avant d'enregistrer</h3><p class="muted small" style="margin:0">${rows.length} note${rows.length>1?"s":""} à relire${auto.length?` · ${auto.length} déjà correcte${auto.length>1?"s":""}`:""}. Décochez ce que vous ne voulez pas appliquer.</p>
   <div class="review">${order.map(i=>{const r=rows[i];const it=r.it;const head=nm(r.cid)!==last?`<h4 style="margin:12px 0 2px">${esc(nm(r.cid)||"Enfant à choisir")}</h4>`:"";last=nm(r.cid);
-    return `${head}<div class="ritem"><div class="sel"><input type="checkbox" id="iac${i}" checked> <span class="small muted">${it.date?fmtD(it.date):""} · ${where[it.kind]||""}</span></div>
-    ${it.kind==="q"?`<select class="field" id="iak${i}"><option value="">Choisir l'enfant…</option>${kids.map(([k,c])=>`<option value="${k}" ${k===r.cid?"selected":""}>${esc(c.name)}</option>`).join("")}</select>`:""}
-    ${r.after!==it.text.trim()?`<div class="before">${esc(it.text)}</div>`:""}<textarea class="field" id="iat${i}">${esc(r.after)}</textarea>
+    return `${head}<div class="ritem"><div class="sel"><input type="checkbox" id="iac${i}" checked> <span class="small muted">${it.date?fmtD(it.date):""}${where[it.kind]?" · "+where[it.kind]:""}${roleTxt(r)?" · "+roleTxt(r):""}</span></div>
+    ${it.kind==="q"||r.role==="copy"?`<select class="field" id="iak${i}"><option value="">Choisir l'enfant…</option>${kids.map(([k,c])=>`<option value="${k}" ${k===r.cid?"selected":""}>${esc(c.name)}</option>`).join("")}</select>`:""}
+    ${r.role==="main"&&r.after!==it.text.trim()?`<div class="before">${esc(it.text)}</div>`:""}<textarea class="field" id="iat${i}">${esc(r.after)}</textarea>
     <button class="btn ghost small" data-iaopen="${i}" style="margin-top:2px">✨ Reformuler autrement</button>
     <div class="iacmd" id="iacm${i}" hidden style="gap:6px;flex-wrap:wrap;align-items:center;margin-top:4px"><input class="field" id="iaq${i}" placeholder="Commande ✨ (ex. : plus court)" style="flex:1 1 160px;min-width:0;padding:6px 10px;font-size:.88rem"><button class="btn small" data-iaq="${i}">✨ Reformuler</button>${["Plus court","Plus clinique","Sépare faits et hypothèses"].map(t=>`<button class="sugchip" data-iaqc="${i}" data-t="${t}">${t}</button>`).join("")}</div>
-    ${it.kind==="n"||it.kind==="q"?`<span id="iadw${i}">${destSel(i,r.cid,r.dest)}</span>`:""}</div>`}).join("")}</div>
+    ${it.kind==="n"||it.kind==="q"?`<span id="iadw${i}">${destSel(i,r.cid,r.dest)}</span>${extrasHTML(i,r)}`:""}</div>`}).join("")}</div>
   <div class="row-actions"><button class="btn primary" id="iaSave">Enregistrer</button><button class="btn" id="iaNo">Annuler</button></div>`,s=>{
     s.querySelector("#iaNo").onclick=closeSheet;
     rows.forEach((r,i)=>{const k=s.querySelector("#iak"+i);if(k)k.onchange=()=>{s.querySelector("#iadw"+i).innerHTML=destSel(i,k.value,"")}});
@@ -1318,28 +1337,143 @@ function iaReview(gid,all,res){const lab={n:"N",f:"F",x:"X",q:"Q"};const rows=[]
     s.querySelectorAll("[data-iaopen]").forEach(b=>b.onclick=()=>{const m=s.querySelector("#iacm"+b.dataset.iaopen);m.hidden=false;m.style.display="flex";b.remove();m.querySelector("input").focus()});
     s.querySelectorAll("[data-iaq]").forEach(b=>b.onclick=()=>redo(+b.dataset.iaq,s.querySelector("#iaq"+b.dataset.iaq).value,b));
     s.querySelectorAll("[data-iaqc]").forEach(b=>b.onclick=()=>{s.querySelector("#iaq"+b.dataset.iaqc).value=b.dataset.t;redo(+b.dataset.iaqc,b.dataset.t,b)});
-    s.querySelector("#iaSave").onclick=()=>{const picks=rows.map((r,i)=>({r,on:s.querySelector("#iac"+i).checked,text:s.querySelector("#iat"+i).value.trim(),cid:s.querySelector("#iak"+i)?s.querySelector("#iak"+i).value:r.cid,dest:s.querySelector("#iad"+i)?s.querySelector("#iad"+i).value:r.dest}));
-      const miss=picks.filter(p=>p.on&&p.r.it.kind==="q"&&!p.cid).length;if(miss){toast(`Choisissez l'enfant pour ${miss} note${miss>1?"s":""}, ou décochez-la${miss>1?"s":""}.`);return}
+    s.querySelector("#iaSave").onclick=()=>{const picks=rows.map((r,i)=>({r,on:s.querySelector("#iac"+i).checked,text:s.querySelector("#iat"+i).value.trim(),cid:s.querySelector("#iak"+i)?s.querySelector("#iak"+i).value:r.cid,dest:s.querySelector("#iad"+i)?s.querySelector("#iad"+i).value:r.dest,
+        cases:[...s.querySelectorAll(`[data-iacs="${i}"]:checked`)].map(x=>x.value),nv:s.querySelector("#iav"+i)?s.querySelector("#iav"+i).value:""}));
+      const miss=picks.filter(p=>p.on&&(p.r.it.kind==="q"||p.r.role==="copy")&&!p.cid).length;if(miss){toast(`Choisissez l'enfant pour ${miss} note${miss>1?"s":""}, ou décochez-la${miss>1?"s":""}.`);return}
       iaSave(gid,picks,auto)}})}
-function iaSave(gid,picks,auto){const by=getMe();const X=new Map();const get=cid=>{if(!X.has(cid))X.set(cid,JSON.parse(JSON.stringify(S.children.get(cid))));return X.get(cid)};
+function iaApplyDest(x,o,dest,dest0){if(!dest||dest===dest0)return;if(isObjOnly(x)){o.obs=1;if(dest.startsWith("cat:")){delete o.cobj;o.cat=dest.slice(4)}else{o.cobj=dest;delete o.cat}}else{o.section=dest.split(".")[0];if(dest.includes("."))o.k=dest;else delete o.k}}
+function iaApplyMarks(x,dest,cases,nv,d){(cases||[]).forEach(k=>{x.checks=x.checks||{};const L=x.checks[k]=x.checks[k]||[];if(!L.includes(d))L.push(d)});
+  if(nv&&dest&&!dest.startsWith("cat:")&&isObjOnly(x)){const o=(x.objectifs||[]).find(z=>z.id===dest);if(o){o.marks=o.marks||{};if(!o.marks[d])o.marks[d]=nv}}}
+function iaSave(gid,picks,auto){const me=getMe();const X=new Map();const get=cid=>{if(!X.has(cid))X.set(cid,JSON.parse(JSON.stringify(S.children.get(cid))));return X.get(cid)};
   const find=(x,it)=>(it.kind==="n"?x.notes:it.kind==="x"?x.explore:(x.free||{})[it.k]||[]).find(v=>v.id===it.id);
-  auto.forEach(it=>{const o=find(get(it.cid),it);if(o)o.clean=true});
+  auto.forEach(it=>{const o=find(get(it.cid),it);if(o){o.clean=true;if(it.kind==="n")o.ranged=1}});
   const qDone=new Set();let n=0;
-  picks.forEach(({r,on,text,cid,dest})=>{const it=r.it;
-    if(it.kind==="q"){if(!on||!text)return;qDone.add(it.id);const x=get(cid);const obj=isObjOnly(x);
-      const note={id:uid("n"),date:it.date||todayISO(),text,raw:it.text,clean:true,src:"terrain",by};
-      if(obj){note.obs=1;if(dest.startsWith("cat:"))note.cat=dest.slice(4);else if(dest)note.cobj=dest}
-      else{note.section=(dest||"portrait").split(".")[0];if(dest.includes("."))note.k=dest}
-      (x.notes=x.notes||[]).push(note);n++;return}
-    const x=get(it.cid);const o=find(x,it);if(!o)return;o.clean=true;if(!on||!text)return;
-    if(text!==String(o.text).trim()){if(!o.raw)o.raw=o.text;o.text=text}
-    if(it.kind==="n"&&dest&&dest!==it.dest0){if(isObjOnly(x)){o.obs=1;if(dest.startsWith("cat:")){delete o.cobj;o.cat=dest.slice(4)}else{o.cobj=dest;delete o.cat}}
-      else{o.section=dest.split(".")[0];if(dest.includes("."))o.k=dest;else delete o.k}}
-    n++});
+  picks.forEach(({r,on,text,cid,dest,cases,nv})=>{const it=r.it;const d=it.date||todayISO();
+    if(r.role==="main"){const x=get(it.cid);const o=find(x,it);if(!o)return;o.clean=true;if(it.kind==="n")o.ranged=1;if(!on||!text)return;
+      if(text!==String(o.text).trim()){if(!o.raw)o.raw=o.text;o.text=text}
+      if(it.kind==="n"){iaApplyDest(x,o,dest,it.dest0);iaApplyMarks(x,o.cobj||dest,cases,nv,d)}n++;return}
+    if(!on||!text||!cid)return;if(it.kind==="q")qDone.add(it.id);
+    const x=get(cid);const note={id:uid("n"),date:d,text,raw:it.text,clean:true,ranged:1,src:it.kind==="q"?"terrain":"ia",by:it.by||me};
+    if(r.role==="copy")note.from=(S.children.get(it.cid)||{}).name||"";
+    if(isObjOnly(x)){note.obs=1;if(dest.startsWith("cat:"))note.cat=dest.slice(4);else if(dest)note.cobj=dest}
+    else{note.section=(dest||"portrait").split(".")[0];if(dest.includes("."))note.k=dest}
+    (x.notes=x.notes||[]).push(note);iaApplyMarks(x,dest,cases,nv,d);n++});
   X.forEach((x,cid)=>{S.children.set(cid,x);persist("children",cid)});
   if(qDone.size){const gg=JSON.parse(JSON.stringify(S.groups.get(gid)));gg.inbox=(gg.inbox||[]).filter(q=>!qDone.has(q.id));S.groups.set(gid,gg);persist("groups",gid)}
   closeSheet();render();toast(n?`${n} note${n>1?"s":""} rangée${n>1?"s":""} et corrigée${n>1?"s":""}`:"Tout était déjà correct")}
-function iaBtn(gid,big){const n=iaPending(gid).length;return `<button class="btn ${big?"primary":"small primary"}" data-act="iaAll" data-id="${gid}" ${n?"":"disabled"}>✨ Tout ranger et corriger${n?` (${n})`:""}</button>`}
+function iaBtn(gid,big){const n=iaPending(gid).length;return `<button class="btn ${big?"primary":"small primary"}" data-act="iaAll" data-id="${gid}" ${n?"":"disabled"}>✨ Tout ranger et corriger${n?` (${n})`:""}</button>${big?"":`<button class="btn ghost small" data-act="notesMenu" data-id="${gid}" title="Reprendre le rangement de notes déjà traitées">↻</button>`}`}
+/* ---------- Version B : banque à cocher, photos en lot, prochaine rencontre, retour de sortie, frise ---------- */
+function bankAdd(cid,nums){const c=S.children.get(cid);if(!c)return 0;let n=0;
+  mutChild(cid,x=>{x.objectifs=x.objectifs||[];nums.forEach(num=>{const b=BANK.find(z=>String(z.n)===String(num));if(!b)return;if(x.objectifs.some(o=>!o.arch&&o.label===b.l))return;
+    x.objectifs.push({id:uid("o"),label:b.l,titre:b.t,gen:{c:b.c,m:b.m},strat:b.mod,k:"",occ:"",date:S.obsDate||todayISO(),marks:{}});n++})});
+  const act=childObjs(S.children.get(cid)).filter(o=>!o.done).length;return {n,act}}
+function bankPickHTML(gid){const L=gid?childrenOf(gid).map(([k,c])=>[k,c,S.groups.get(gid)]):[...S.children.entries()].map(([k,c])=>[k,c,S.groups.get(c.groupId)]).filter(x=>x[2]);
+  const byG={};L.forEach(([k,c,g])=>{(byG[g.name]=byG[g.name]||[]).push([k,c])});
+  return `<div style="position:sticky;bottom:0;background:var(--card,#fffdf8);border-top:1px solid var(--line);padding:8px 0;margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select class="field" id="bkKid" style="flex:1 1 160px;width:auto"><option value="">Pour quel enfant ?</option>${Object.entries(byG).map(([gn,K])=>`<optgroup label="${esc(gn)}">${K.sort((a,b)=>a[1].name.localeCompare(b[1].name,"fr")).map(([k,c])=>`<option value="${k}">${esc(c.name)}</option>`).join("")}</optgroup>`).join("")}</select><button class="btn primary" id="bkAdd" disabled>Ajouter à la fiche</button></div>`}
+/* Photos en lot */
+function phDay(f){const t=f&&f.lastModified?new Date(f.lastModified):new Date();return new Date(t.getTime()-t.getTimezoneOffset()*60000).toISOString().slice(0,10)}
+async function phBatch(gid,files,btn){if(!assets){toast("Les photos ne sont pas disponibles ici.");return}files=[...files].filter(f=>/^image\//.test(f.type));if(!files.length)return;
+  const out=[];let i=0;for(const f of files){i++;if(btn)btn.textContent=`📷 ${i} sur ${files.length}…`;try{let b=f;try{b=await shrink(f)}catch(e){}const r=await assets.upload(b,{type:b.type||"image/jpeg"});out.push({id:r.id,d:phDay(f),at:new Date().toISOString()})}catch(e){console.warn(e)}}
+  if(out.length)mutGroup(gid,g=>{g.photoInbox=(g.photoInbox||[]).concat(out)});if(btn)btn.textContent="📷 Photos";toast(`${out.length} photo${out.length>1?"s":""} dans « Photos à classer »`)}
+function phInboxHTML(gid){const g=S.groups.get(gid);const L=(g&&g.photoInbox)||[];if(!L.length)return "";
+  return `<section class="card inbox"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h3 style="margin:0;font-size:1.2rem">📷 Photos à classer <span class="pill">${L.length}</span></h3><button class="btn small primary" data-act="phSort" data-id="${gid}" style="margin-left:auto">Classer</button></div>
+    <div style="display:flex;gap:6px;overflow-x:auto;margin-top:8px">${L.slice(0,8).map(p=>`<img src="${blobSrc(p.id)}" data-pid="${p.id}" alt="" style="height:64px;width:64px;object-fit:cover;border-radius:8px;flex:0 0 auto">`).join("")}</div></section>`}
+function phDests(c){if(!c)return [];if(isObjOnly(c))return [["obs","Autres observations"]].concat(childObjs(c).map(o=>["obj:"+o.id,"🎯 "+objShort(o)]));
+  return [["portrait","Portrait (photos du terrain)"]].concat(OCCS.flatMap(o=>occSecs(c,o).flatMap(sec=>sec.rows.filter(r=>!r.free).map(r=>[sec.id+"."+r.id,shortT(o.titre)+" › "+r.label]))))}
+function phSort(gid,idx){const g=S.groups.get(gid);const L=(g&&g.photoInbox)||[];if(!L.length){closeSheet();render();toast("Toutes les photos sont classées.");return}
+  idx=((idx||0)%L.length+L.length)%L.length;const p=L[idx];const kids=childrenOf(gid);const sel=new Set();
+  openSheet(`<h3>Classer les photos <span class="muted small">${idx+1} / ${L.length}</span></h3>
+    <div class="phnav" style="position:relative;touch-action:pan-y"><img class="bigphoto" src="${blobSrc(p.id)}" data-pid="${p.id}" alt="" draggable="false">${L.length>1?`<button class="phbtn" data-phs="-1" aria-label="Précédente" style="position:absolute;left:4px;top:50%;transform:translateY(-50%);width:40px;height:40px;border-radius:50%;border:0;background:rgba(255,255,255,.85);font-size:1.4rem">‹</button><button class="phbtn" data-phs="1" aria-label="Suivante" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);width:40px;height:40px;border-radius:50%;border:0;background:rgba(255,255,255,.85);font-size:1.4rem">›</button>`:""}</div>
+    <label class="f">Date<input type="date" class="field" id="psD" value="${esc(p.d||todayISO())}"></label>
+    <p class="label" style="margin:10px 0 4px">Qui est sur la photo ?</p><div class="chips">${kids.map(([k,c])=>`<button type="button" class="chip" data-psk="${k}"><img src="${avSrc(c)}"${avAt(c)} alt="" style="width:22px;height:22px;border-radius:50%;vertical-align:middle"> ${esc(c.name)}</button>`).join("")}</div>
+    <div id="psW"></div>
+    <label class="f">Note (facultatif)<textarea class="field" id="psN" style="min-height:60px" placeholder="Ce qu'on voit sur la photo…"></textarea></label>
+    <div class="row-actions"><button class="btn primary" id="psOk" disabled>Ranger</button><button class="btn" id="psLater">Plus tard</button><button class="btn danger" id="psDel" style="margin-left:auto">Supprimer</button></div>
+    <div class="row-actions"><button class="btn ghost small" id="psClose">Fermer</button></div>`,s=>{
+      const drawW=()=>{const K=[...sel];s.querySelector("#psOk").disabled=!K.length;s.querySelector("#psW").innerHTML=K.map(k=>{const c=S.children.get(k);const D=phDests(c);return `<label class="f">Pour ${esc(c.name)}, ranger sous…<select class="field" data-psw="${k}">${D.map(([v,l])=>`<option value="${esc(v)}">${esc(l)}</option>`).join("")}</select></label>`}).join("")+(K.length>1?`<p class="small muted" style="margin:6px 0 0">⚠️ Cette photo montre plusieurs enfants : elle sera rangée chez chacun et signalée dans les documents.</p>`:"")};
+      s.querySelectorAll("[data-psk]").forEach(b=>b.onclick=()=>{const k=b.dataset.psk;sel.has(k)?sel.delete(k):sel.add(k);b.classList.toggle("on");drawW()});
+      s.querySelectorAll("[data-phs]").forEach(b=>b.onclick=()=>phSort(gid,idx+(+b.dataset.phs)));
+      const box=s.querySelector(".phnav");let x0=null,y0=0;box.addEventListener("touchstart",e=>{x0=e.touches[0].clientX;y0=e.touches[0].clientY},{passive:true});
+      box.addEventListener("touchend",e=>{if(x0===null)return;const dx=e.changedTouches[0].clientX-x0,dy=e.changedTouches[0].clientY-y0;x0=null;if(Math.abs(dx)>45&&Math.abs(dx)>Math.abs(dy))phSort(gid,idx+(dx<0?1:-1))});
+      s.querySelector("#psLater").onclick=()=>phSort(gid,idx+1);s.querySelector("#psClose").onclick=()=>{closeSheet();render()};
+      s.querySelector("#psDel").onclick=()=>confirmSheet("Supprimer cette photo pour de bon ?",async()=>{try{await assets.delete(p.id)}catch(e){}mutGroup(gid,x=>{x.photoInbox=(x.photoInbox||[]).filter(q=>q.id!==p.id)});setTimeout(()=>phSort(gid,idx),50)});
+      s.querySelector("#psOk").onclick=()=>{const K=[...sel];const d=s.querySelector("#psD").value||p.d||todayISO();const note=s.querySelector("#psN").value.trim();const multi=K.length>1;
+        K.forEach(k=>{const v=s.querySelector(`[data-psw="${k}"]`).value;mutChild(k,x=>{(x.photos=x.photos||[]).push(Object.assign({id:p.id,k:v,d,at:new Date().toISOString()},multi?{multi:K.length}:{}));
+          if(note){const n={id:uid("n"),date:d,text:note,src:"photo",by:getMe(),photo:p.id};if(isObjOnly(x)){n.obs=1;if(v.startsWith("obj:"))n.cobj=v.slice(4)}else{n.section=v.split(".")[0];if(v.includes("."))n.k=v}(x.notes=x.notes||[]).push(n)}})});
+        mutGroup(gid,x=>{x.photoInbox=(x.photoInbox||[]).filter(q=>q.id!==p.id)});toast("Photo rangée");setTimeout(()=>phSort(gid,idx),50)}})}
+/* Frise d'un objectif */
+function objFrise(o,max){const M=Object.entries(o.marks||{}).filter(x=>x[1]).sort((a,b)=>a[0].localeCompare(b[0])).slice(-(max||12));if(!M.length)return "";
+  return `<div class="ofrise" style="display:flex;gap:6px;overflow-x:auto;align-items:flex-end;margin:6px 0 2px;padding-bottom:2px">${M.map(([d,v])=>`<div style="text-align:center;flex:0 0 auto"><div style="height:30px">${omk(v)}</div><div class="small muted" style="font-size:.7rem;line-height:1">${new Date(d+"T12:00").toLocaleDateString("fr-CA",{day:"numeric",month:"short"})}</div></div>`).join(`<div style="flex:0 0 10px;border-top:2px dotted #CFC6B3;margin-bottom:18px"></div>`)}</div>`}
+/* Prochaine rencontre */
+function prepCardHTML(gid){const g=S.groups.get(gid);const P=g&&g.prochaine;if(!P||(!String(P.groupe||"").trim()&&!Object.values(P.enfants||{}).some(t=>String(t||"").trim())))return "";
+  const kids=childrenOf(gid).filter(([k])=>String((P.enfants||{})[k]||"").trim());
+  return `<section class="card" style="border-left:4px solid var(--sun,#E8B84A)"><div style="display:flex;align-items:center;gap:8px"><h3 style="margin:0;font-size:1.2rem;flex:1">📋 Prochaine rencontre</h3><button class="btn ghost small" data-act="prep" data-id="${gid}">Modifier</button></div>
+    ${String(P.groupe||"").trim()?`<p style="margin:6px 0;white-space:pre-wrap">${esc(P.groupe)}</p>`:""}
+    ${kids.length?`<details><summary class="small"><b>Pour chaque enfant (${kids.length})</b></summary>${kids.map(([k,c])=>`<p class="small" style="margin:6px 0"><b>${esc(c.name)}</b> : ${esc(P.enfants[k])}</p>`).join("")}</details>`:""}
+    ${P.maj?`<p class="muted small" style="margin:4px 0 0">Préparé le ${fmtD(P.maj)}${P.by?" par "+esc(P.by):""}</p>`:""}</section>`}
+function prepPrompt(gid){const g=S.groups.get(gid);const kids=childrenOf(gid);
+  const J=(g.journal||[]).slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,3).map(j=>`- ${j.date} : ${String(j.text).slice(0,500)}`).join("\n");
+  const K=kids.map(([k,c])=>{const N=(c.notes||[]).filter(n=>String(n.text||"").trim()).sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,6).map(n=>`  - ${n.date} : ${noteTxt(c,n).slice(0,350)}`).join("\n");
+    const O=childObjs(c).filter(o=>!o.done).map(o=>`  objectif : ${objShort(o)}${o.strat?" (stratégies : "+String(o.strat).slice(0,200)+")":""}`).join("\n");return `${c.name}\n${O||"  (aucun objectif)"}\n${N||"  (aucune note récente)"}`}).join("\n\n");
+  return `Tu prépares la prochaine rencontre d'un groupe de classe nature (${g.name}), animé par une ergothérapeute et une éducatrice spécialisée.
+1. Pour le GROUPE : en 2 à 5 lignes, ce qu'il serait utile de prévoir (activité ou thème, aménagement de l'environnement, matériel, transitions), à partir des notes et du journal. Reste concret et réaliste.
+2. Pour CHAQUE ENFANT : un mémo de 1 à 3 phrases à lire avant de partir : l'objectif à observer, ce qui l'a aidé récemment, un point à surveiller. Rien d'inventé ; si on manque d'information, dis-le en quelques mots.
+JOURNAL DU GROUPE
+${J||"(vide)"}
+
+ENFANTS
+${K}
+
+Réponds seulement en JSON : {"groupe":"…","enfants":{"Prénom":"…"}}`}
+function prepSheet(gid){const g=S.groups.get(gid);const P=g.prochaine||{};const kids=childrenOf(gid);
+  openSheet(`<h3>📋 Prochaine rencontre</h3><p class="muted small" style="margin:0">S'affiche en haut de la vue du jour, pour vous et votre collègue.</p>
+    ${sample?`<div class="row-actions"><button class="btn" id="ppAI">✨ Proposer à partir des notes</button></div>`:""}
+    <label class="f">Pour le groupe <span class="muted small">(activité, aménagement, matériel…)</span><textarea class="field" id="ppG" style="min-height:90px" placeholder="Ex. : cuisine sur le feu; moins d'outils à disposition; prévoir le capybara pour le retour">${esc(P.groupe||"")}</textarea></label>
+    <details ${Object.values(P.enfants||{}).some(t=>t)?"open":""}><summary class="small"><b>Pour chaque enfant</b></summary>${kids.map(([k,c])=>`<label class="f small">${esc(c.name)}<textarea class="field" data-ppk="${k}" style="min-height:52px">${esc((P.enfants||{})[k]||"")}</textarea></label>`).join("")}</details>
+    <div class="row-actions"><button class="btn primary" id="ppOk">Enregistrer</button><button class="btn" id="ppNo">Annuler</button><button class="btn ghost small" id="ppClr" style="margin-left:auto">Effacer</button></div>`,s=>{
+      s.querySelector("#ppNo").onclick=closeSheet;
+      s.querySelector("#ppClr").onclick=()=>{mutGroup(gid,x=>{delete x.prochaine});closeSheet();toast("Effacé")};
+      s.querySelector("#ppOk").onclick=()=>{const E={};s.querySelectorAll("[data-ppk]").forEach(t=>{if(t.value.trim())E[t.dataset.ppk]=t.value.trim()});mutGroup(gid,x=>{x.prochaine={groupe:s.querySelector("#ppG").value.trim(),enfants:E,maj:todayISO(),by:getMe()}});closeSheet();toast("Prochaine rencontre enregistrée")};
+      const ai=s.querySelector("#ppAI");if(ai)ai.onclick=async()=>{ai.disabled=true;ai.innerHTML='<span class="spinner"></span> Préparation…';
+        try{const r=await sample.json(prepPrompt(gid),{modelTier:"default",max:4000});if(r&&r.groupe&&!s.querySelector("#ppG").value.trim())s.querySelector("#ppG").value=String(r.groupe).trim();else if(r&&r.groupe)s.querySelector("#ppG").value+="\n"+String(r.groupe).trim();
+          Object.entries((r&&r.enfants)||{}).forEach(([nm,t])=>{const k=iaKid(gid,nm);const ta=k&&s.querySelector(`[data-ppk="${k}"]`);if(ta&&!ta.value.trim())ta.value=String(t).trim()});s.querySelector("details").open=true;toast("Proposition prête : relisez et ajustez")}
+        catch(e){toast("La préparation n'a pas fonctionné"+(e&&e.message?" : "+e.message:"."))}ai.disabled=false;ai.textContent="✨ Proposer à partir des notes"}})}
+/* Retour de sortie */
+function consOK(c,k){const L=(c.consents||[]).filter(r=>r.status==="signe").sort((a,b)=>String(b.signedAt).localeCompare(String(a.signedAt)));const r=L[0];if(!r)return false;if(r.type==="papier")return null;return !!(r.data&&r.data.rep&&r.data.rep[k])}
+function dayPhotos(gid,d){const M=new Map();childrenOf(gid).forEach(([k,c])=>(c.photos||[]).forEach(p=>{if(p.d===d){if(!M.has(p.id))M.set(p.id,new Set());M.get(p.id).add(k)}}));return [...M.entries()].map(([id,ks])=>({id,ks:[...ks]}))}
+function retourSheet(gid,tab){const g=S.groups.get(gid);const d=S.obsDate||todayISO();tab=tab||"parents";
+  const P=dayPhotos(gid,d).map(p=>{const st=p.ks.map(k=>consOK(S.children.get(k),"photos_parents"));return Object.assign(p,{ok:st.every(x=>x===true),paper:st.some(x=>x===null)})});
+  const ok=P.filter(p=>p.ok),bad=P.filter(p=>!p.ok);
+  const kidsD=childrenOf(gid).filter(([,c])=>dayTouched(c,d));
+  openSheet(`<h3>✨ Retour de sortie · ${fmtD(d)}</h3><div class="hbtns" style="margin:4px 0 8px"><button class="hbtn${tab==="parents"?" on":""}" data-rt="parents">Parents du groupe</button><button class="hbtn${tab==="ecole"?" on":""}" data-rt="ecole">École</button></div>
+    ${tab==="parents"?`<p class="muted small" style="margin:0">Un court message pour le groupe Messenger des parents, sans nommer les enfants, avec les photos permises.</p>
+      <div class="row-actions"><button class="btn" id="rtW">✨ Rédiger le message</button></div><textarea class="field" id="rtT" style="min-height:120px" placeholder="Le message apparaîtra ici…"></textarea>
+      <p class="label" style="margin:10px 0 4px">Photos du ${fmtD(d)} (${ok.length} permise${ok.length>1?"s":""})</p>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">${ok.map(p=>`<label style="position:relative"><img src="${blobSrc(p.id)}" data-pid="${p.id}" alt="" style="width:84px;height:84px;object-fit:cover;border-radius:8px;display:block"><input type="checkbox" data-rtp="${p.id}" checked style="position:absolute;top:4px;left:4px;width:20px;height:20px"></label>`).join("")||`<span class="small muted">Aucune photo permise ce jour-là.</span>`}</div>
+      ${bad.length?`<p class="small" style="margin:8px 0 0">⚠️ ${bad.length} photo${bad.length>1?"s":""} écartée${bad.length>1?"s":""} : un enfant visible n'a pas de « Oui » à la diffusion aux autres parents${bad.some(p=>p.paper)?" (ou son consentement est sur papier : vérifiez-le)":""}.</p>`:""}
+      <div class="row-actions" style="margin-top:10px">${navigator.share?`<button class="btn primary" id="rtS">Partager (Messenger…)</button>`:""}<button class="btn${navigator.share?"":" primary"}" id="rtC">Copier le message</button><button class="btn" id="rtDl">Télécharger les photos</button></div>`
+    :`<p class="muted small" style="margin:0">Un mot court pour l'enseignante : ce qui a aidé, la transition, l'objectif travaillé.</p>
+      <div class="chips" style="margin:8px 0">${childrenOf(gid).map(([k,c])=>`<button type="button" class="chip${kidsD.some(x=>x[0]===k)?" on":""}" data-rtk="${k}">${esc(c.name)}</button>`).join("")}</div>
+      <div class="row-actions"><button class="btn" id="rtE">✨ Rédiger les mots</button></div><div id="rtEL"></div>`}
+    <div class="row-actions"><button class="btn ghost small" id="rtX">Fermer</button></div>`,s=>{
+      s.querySelectorAll("[data-rt]").forEach(b=>b.onclick=()=>retourSheet(gid,b.dataset.rt));s.querySelector("#rtX").onclick=closeSheet;
+      const notesOf=c=>(c.notes||[]).filter(n=>n.date===d).map(n=>noteTxt(c,n)).concat((c.explore||[]).filter(n=>n.date===d).map(n=>n.text)).join(" / ");
+      if(tab==="parents"){
+        const w=s.querySelector("#rtW");w.onclick=async()=>{if(!sample){toast("L'IA n'est pas activée.");return}w.disabled=true;w.innerHTML='<span class="spinner"></span> Rédaction…';
+          try{const J=(g.journal||[]).filter(j=>j.date===d).map(j=>j.text).join(" ");const N=childrenOf(gid).map(([,c])=>notesOf(c)).filter(Boolean).join("\n- ");
+            const r=await sample(`Rédige un court message chaleureux (4 à 6 phrases) pour le groupe Messenger des parents d'une classe nature (${g.name}), à propos de la sortie du ${fmtD(d)}. Parle du groupe : activités, découvertes, climat. Ne nomme AUCUN enfant et ne donne aucune information personnelle ou sensible sur un enfant. Ton simple, positif et vrai, sans exagérer. Réponds seulement avec le message.\n\nJOURNAL : ${J||"(vide)"}\nNOTES DU JOUR :\n- ${N||"(aucune)"}`,{modelTier:"default"});
+            s.querySelector("#rtT").value=String(r&&r.text||"").trim()}catch(e){toast("La rédaction n'a pas fonctionné.")}w.disabled=false;w.textContent="✨ Rédiger le message"};
+        const blobs=async()=>{const ids=[...s.querySelectorAll("[data-rtp]:checked")].map(i=>i.dataset.rtp);const out=[];for(const id of ids){const b=await LOCAL.getPhoto(id);if(b)out.push(new File([b],`sortie-${d}-${out.length+1}.jpg`,{type:b.type||"image/jpeg"}))}return out};
+        s.querySelector("#rtC").onclick=()=>copyText(s.querySelector("#rtT").value,"Message copié");
+        s.querySelector("#rtDl").onclick=async()=>{const F=await blobs();if(!F.length){toast("Aucune photo choisie.");return}F.forEach((f,i)=>setTimeout(()=>{const a=document.createElement("a");a.href=URL.createObjectURL(f);a.download=f.name;document.body.appendChild(a);a.click();a.remove()},i*300))};
+        const sh=s.querySelector("#rtS");if(sh)sh.onclick=async()=>{const F=await blobs();const data={text:s.querySelector("#rtT").value};if(F.length&&navigator.canShare&&navigator.canShare({files:F}))data.files=F;try{await navigator.share(data)}catch(e){}}}
+      else{const sel=new Set(kidsD.map(x=>x[0]));s.querySelectorAll("[data-rtk]").forEach(b=>b.onclick=()=>{const k=b.dataset.rtk;sel.has(k)?sel.delete(k):sel.add(k);b.classList.toggle("on")});
+        const e=s.querySelector("#rtE");e.onclick=async()=>{if(!sample){toast("L'IA n'est pas activée.");return}const K=[...sel];if(!K.length){toast("Choisissez au moins un enfant.");return}e.disabled=true;e.innerHTML='<span class="spinner"></span> Rédaction…';
+          try{const r=await sample.json(`Pour chaque enfant ci-dessous, rédige un mot court (2 à 4 phrases) pour son enseignante, après la classe nature du ${fmtD(d)} : ce qui l'a aidé, comment s'est passée la transition du retour si c'est noté, et l'objectif travaillé. Ton professionnel, simple et bienveillant, factuel. N'invente rien.\n\n${K.map(k=>{const c=S.children.get(k);return `${c.name} (objectifs : ${childObjs(c).filter(o=>!o.done).map(objShort).join(" ; ")||"aucun"}) : ${notesOf(c)||"(aucune note ce jour-là)"}`}).join("\n")}\n\nRéponds seulement en JSON : {"Prénom":"mot"}`,{modelTier:"default",max:4000});
+            s.querySelector("#rtEL").innerHTML=Object.entries(r||{}).map(([nm,t])=>`<label class="f">${esc(nm)}<textarea class="field rtm" style="min-height:90px">${esc(String(t).trim())}</textarea></label>`).join("")+`<div class="row-actions"><button class="btn primary" id="rtEC">Copier tout</button>${navigator.share?`<button class="btn" id="rtES">Partager</button>`:""}</div>`;
+            const all=()=>[...s.querySelectorAll(".rtm")].map(t=>t.closest("label").firstChild.textContent.trim()+" : "+t.value.trim()).join("\n\n");
+            s.querySelector("#rtEC").onclick=()=>copyText(all(),"Mots copiés");const es=s.querySelector("#rtES");if(es)es.onclick=()=>navigator.share({text:all()}).catch(()=>{})}
+          catch(err){toast("La rédaction n'a pas fonctionné.")}e.disabled=false;e.textContent="✨ Rédiger les mots"}}})}
 /* ---------- Activités proposées ---------- */
 function actBank(g){const m=new Map();Object.values(g.activites||{}).forEach(L=>(L||[]).forEach(a=>{const k=norm(a.text);const o=m.get(k)||{text:a.text,occ:a.occ,n:0};o.n++;if(!o.occ&&a.occ)o.occ=a.occ;m.set(k,o)}));return [...m.values()].sort((a,b)=>b.n-a.n)}
 function actBlock(gid,d){const g=S.groups.get(gid);const L=(g.activites||{})[d]||[];const fut=d>todayISO();const bank=actBank(g).filter(b=>!L.some(a=>norm(a.text)===norm(b.text))).slice(0,12);
@@ -1693,7 +1827,7 @@ function portraitObjHTML(cid,c){const T=TEMPLATES[baseTpl(c)];const all=childObj
     ${M.length?`<div class="odots">${M.slice(-12).map(([d,x])=>`<i class="od ${x}" title="${fmtD(d)}"></i>`).join("")}<span class="muted small">${okN}/${M.length} réussi${okN>1?"s":""} · dernière fois ${fmtD(M[M.length-1][0])}</span></div>`:`<div class="odots"><span class="muted small">Pas encore noté · touchez le rond à la prochaine rencontre</span></div>`}
     ${o.done?"":objCtxHTML(cid,c,o,S.obsDate,`data-act="cObjCtx" data-id="${cid}"`)}
     ${(()=>{const L=(c.notes||[]).filter(n=>n.cobj===o.id).map(n=>({d:n.date,n})).concat(photosOf(c,p=>p.k==="obj:"+o.id).map(p=>({d:p.d,p}))).sort((a,b)=>(b.d||"").localeCompare(a.d||""));if(!L.length)return "";return `<details class="olinks"><summary>Observations en lien (${L.length}) · dernière le ${fmtD(L[0].d)}</summary><div class="entries">${L.map(e=>e.n?`<div class="entry"><span class="when">${fmtD(e.d)}</span><span class="txt">${esc(noteTxt(c,e.n))}</span>${e.n.obs?`<button class="x" title="Délier de cet objectif" aria-label="Délier" data-act="cxUnlink" data-id="${cid}" data-n="${e.n.id}">⤺</button>`:""}</div>`:`<div class="entry"><span class="when">${fmtD(e.d)}</span><span class="txt"><button class="thumb" data-act="viewPhoto" data-id="${cid}" data-p="${e.p.id}" aria-label="Voir la photo"><img src="${blobSrc(e.p.id)}" data-pid="${e.p.id}" alt="" loading="lazy"></button></span></div>`).join("")}</div></details>`})()}
-    <div class="obtns"><button class="onote" data-act="cObjNote" data-id="${cid}" data-o="${o.id}">✎ Note</button>${assets?`<label class="onote">📷 Photo<input type="file" accept="image/*" hidden data-act="objPhoto" data-id="${cid}" data-o="${o.id}"></label>`:""}</div><details class="more omenu"><summary>Options</summary>${!oo&&objShort(o)!==o.label?`<p class="small" style="margin:4px 0">${esc(o.label)}</p>`:""}<div class="row-actions"><button class="btn ghost small" data-act="cObjRen" data-id="${cid}" data-o="${o.id}">Renommer</button><button class="btn ghost small" data-act="cObjStrat" data-id="${cid}" data-o="${o.id}">Stratégie</button><button class="btn ghost small" data-act="cObjGen" data-id="${cid}" data-o="${o.id}">Généralisation</button><button class="btn ghost small" data-act="cObjImg" data-id="${cid}" data-o="${o.id}">Image</button><button class="btn ghost small" data-act="cObjDone" data-id="${cid}" data-o="${o.id}">${o.done?"Rouvrir":"Atteint"}</button><button class="btn ghost small danger" data-act="cObjDel" data-id="${cid}" data-o="${o.id}">Mettre de côté</button></div>${M.length?`<div class="ehist" style="margin-top:6px">${objMarksHTML(o)}</div>`:""}</details></div>`}).join("")||'<p class="muted small">Aucun objectif pour l\'instant.</p>'}</div>
+    ${objFrise(o)}<div class="obtns"><button class="onote" data-act="cObjNote" data-id="${cid}" data-o="${o.id}">✎ Note</button>${assets?`<label class="onote">📷 Photo<input type="file" accept="image/*" hidden data-act="objPhoto" data-id="${cid}" data-o="${o.id}"></label>`:""}</div><details class="more omenu"><summary>Options</summary>${!oo&&objShort(o)!==o.label?`<p class="small" style="margin:4px 0">${esc(o.label)}</p>`:""}<div class="row-actions"><button class="btn ghost small" data-act="cObjRen" data-id="${cid}" data-o="${o.id}">Renommer</button><button class="btn ghost small" data-act="cObjStrat" data-id="${cid}" data-o="${o.id}">Stratégie</button><button class="btn ghost small" data-act="cObjGen" data-id="${cid}" data-o="${o.id}">Généralisation</button><button class="btn ghost small" data-act="cObjImg" data-id="${cid}" data-o="${o.id}">Image</button><button class="btn ghost small" data-act="cObjDone" data-id="${cid}" data-o="${o.id}">${o.done?"Rouvrir":"Atteint"}</button><button class="btn ghost small danger" data-act="cObjDel" data-id="${cid}" data-o="${o.id}">Mettre de côté</button></div>${M.length?`<div class="ehist" style="margin-top:6px">${objMarksHTML(o)}</div>`:""}</details></div>`}).join("")||'<p class="muted small">Aucun objectif pour l\'instant.</p>'}</div>
   ${det("oadd-"+cid,"+ Ajouter un objectif",`<div class="addnote" style="margin-top:10px"><input class="field" id="coLabel" placeholder="Ex. : Attendre son tour à la balançoire avec le sablier">
   <select class="field" id="coLink"><option value="">Lier à une occupation ou un repère (facultatif)</option>${OCCS.map(o=>`<optgroup label="${esc(o.n+". "+o.titre)}"><option value="${o.subs[0]}">${esc(o.titre)} (général)</option>${occSecs(c,o).flatMap(sec=>sec.rows.filter(r=>!r.free).map(r=>`<option value="${sec.id}.${r.id}">${esc(r.label)}</option>`)).join("")}</optgroup>`).join("")}</select>
   <div class="row-actions"><button class="btn primary" data-act="cObjAdd" data-id="${cid}">Ajouter l'objectif</button></div>
@@ -1730,7 +1864,7 @@ function quickNote(gid,cid){const kids=childrenOf(gid);const sel=new Set(cid?[ci
   <textarea class="field" id="qnText" rows="4" placeholder="Ex. : Léo a traversé le ruisseau seul, il a demandé la main au retour."></textarea>
   <div class="row-actions">${micBtn("qnText")}</div>
   <p class="label" style="margin:8px 0 4px">Enfants (facultatif)</p><div class="qkids">${kids.map(([k,c])=>`<button class="hbtn${sel.has(k)?" on":""}" data-qk="${k}">${esc(c.name)}</button>`).join("")}</div>
-  <div class="row-actions" style="margin-top:10px;align-items:center"><button class="btn primary" id="qnSave">Terminé</button><span class="muted small" id="qnSt"></span></div>`,s=>{
+  <div class="row-actions" style="margin-top:10px;align-items:center"><button class="btn primary" id="qnSave">Terminé</button>${assets?`<label class="btn"><span id="qnPhT">📷 Photos</span><input type="file" id="qnPh" accept="image/*" multiple hidden></label>`:""}<span class="muted small" id="qnSt"></span></div>`,s=>{
     let qid=null,t0=null;const ta=s.querySelector("#qnText");
     const up=()=>{const t=ta.value.trim();const st=s.querySelector("#qnSt");
       if(!t&&!qid)return;if(!t&&qid){const id=qid;qid=null;mutGroup(gid,g=>{g.inbox=(g.inbox||[]).filter(q=>q.id!==id)});if(st)st.textContent="";return}
@@ -1739,12 +1873,21 @@ function quickNote(gid,cid){const kids=childrenOf(gid);const sel=new Set(cid?[ci
       if(st)st.textContent="✓ Enregistré"};
     S.qnFlush=up;ta.addEventListener("input",()=>{clearTimeout(t0);t0=setTimeout(up,700)});
     const iv=setInterval(()=>{if(!document.body.contains(ta)){clearInterval(iv);return}up()},2500);
-    ta.dataset.keep="#qnSave";
+    ta.dataset.keep="#qnSave";const qph=s.querySelector("#qnPh");if(qph)qph.onchange=()=>phBatch(gid,qph.files,s.querySelector("#qnPhT"));
     s.querySelectorAll("[data-qk]").forEach(b=>b.onclick=()=>{const k=b.dataset.qk;sel.has(k)?sel.delete(k):sel.add(k);b.classList.toggle("on");if(qid)up()});
     s.querySelector("#qnSave").onclick=()=>{if(recog)try{recog.stop()}catch(e){}up();const had=!!qid;S.qnFlush=null;ta.dataset.kept="1";clearInterval(iv);if($("#layer").contains(ta))closeSheet();if(had)toast("Note gardée dans « À classer »")};
     const mb=s.querySelector('[data-act="dictate"]');if(mb&&SR)setTimeout(()=>dictate("qnText",mb),250)})}
+function homeLinksGet(){try{const d=typeof LOCAL!=="undefined"&&LOCAL.cache&&LOCAL.cache.get("config/liens");if(d&&Array.isArray(d.liens))return d.liens;return JSON.parse(localStorage.getItem("carnet-liens")||"[]")}catch(e){return []}}
+function homeLinks(){const L=homeLinksGet().filter(x=>x&&x.url);
+  return `<div class="row-actions" style="margin-top:12px;align-items:center">${L.map(x=>`<a class="btn small" href="${esc(/^https?:\/\//.test(x.url)?x.url:"https://"+x.url)}" target="_blank" rel="noopener" style="text-decoration:none">🔗 ${esc(x.t||"Lien")}</a>`).join("")}<button class="btn ghost small" data-act="homeLinks">${L.length?"✎ Liens":"+ Ajouter un lien (Padlet…)"}</button></div>`}
+function homeLinksSheet(){const L=homeLinksGet().concat([{}]);const row=x=>`<div class="row hl" style="gap:6px;margin:4px 0"><input class="field" placeholder="Titre (ex. : Padlet sorties nature)" value="${esc(x.t||"")}"><input class="field" placeholder="Adresse (https://…)" inputmode="url" value="${esc(x.url||"")}"></div>`;
+  openSheet(`<h3>Liens utiles</h3><p class="muted small" style="margin:0">Affichés sur la page d'accueil, sur tous vos appareils et ceux de votre collègue.</p><div id="hlL">${L.map(row).join("")}</div><button type="button" class="btn ghost small" id="hlAdd">+ Un lien</button>
+    <div class="row-actions"><button class="btn primary" id="hlOk">Enregistrer</button><button class="btn" id="hlNo">Annuler</button></div>`,s=>{
+      s.querySelector("#hlAdd").onclick=()=>s.querySelector("#hlL").insertAdjacentHTML("beforeend",row({}));s.querySelector("#hlNo").onclick=closeSheet;
+      s.querySelector("#hlOk").onclick=async()=>{const liens=[...s.querySelectorAll(".hl")].map(r=>{const i=r.querySelectorAll("input");return {t:i[0].value.trim(),url:i[1].value.trim()}}).filter(x=>x.url);
+        try{localStorage.setItem("carnet-liens",JSON.stringify(liens))}catch(e){}if(window.CARNET_LOCAL&&db)await db.doc("config/liens").set({liens});closeSheet();render();toast("Liens enregistrés")}})}
 function grpBar(gid,g){const L=(g.liens||[]).filter(x=>x&&x.url);
-  return `<div class="row-actions" style="margin-top:10px"><button class="btn small" data-act="gInfo" data-id="${gid}">ℹ️ Infos du groupe</button>${L.map(x=>`<a class="btn small" href="${esc(/^https?:\/\//.test(x.url)?x.url:"https://"+x.url)}" target="_blank" rel="noopener" style="text-decoration:none">🔗 ${esc(x.t||"Lien")}</a>`).join("")}${window.CONS?`<button class="btn small" data-cons="group" data-id="${gid}">Consentements</button>`:""}</div>`}
+  return `<div class="row-actions" style="margin-top:10px"><button class="btn small" data-act="gInfo" data-id="${gid}">ℹ️ Infos du groupe</button><button class="btn small" data-act="prep" data-id="${gid}">📋 Prochaine rencontre</button>${L.map(x=>`<a class="btn small" href="${esc(/^https?:\/\//.test(x.url)?x.url:"https://"+x.url)}" target="_blank" rel="noopener" style="text-decoration:none">🔗 ${esc(x.t||"Lien")}</a>`).join("")}${window.CONS?`<button class="btn small" data-cons="group" data-id="${gid}">Consentements</button>`:""}</div>`}
 function grpInfoSheet(gid){const g=S.groups.get(gid);if(!g)return;const I=g.infos||{};const C=(I.contacts||[]).filter(x=>x&&(x.nom||x.tel));const L=(g.liens||[]).filter(x=>x&&x.url);
   const al=childrenOf(gid).map(([,c])=>[c.name,(c.infos||{}).allergies]).filter(([,a])=>a&&/^oui/i.test(a));
   const row=(l,v)=>v?`<p style="margin:4px 0"><span class="muted small">${l}</span><br><b>${esc(v)}</b></p>`:"";
@@ -2205,7 +2348,7 @@ function viewSettings(){
       <select class="field" id="nr-t-${sid}"><option value="rep">Répertoire : des cases sans ordre</option><option value="prog">Progression : des étapes en ordre</option></select>
       <textarea class="field" id="nr-s-${sid}" placeholder="Un élément par ligne"></textarea>
       <div class="row-actions"><button class="btn primary" data-act="addCustRow" data-t="${tk}" data-s="${sid}">Ajouter la ligne</button></div></div></div></section>`});
-  return setColl(settingsTop(),"top")+(window.CONS?CONS.settingsHTML():"")+regSettings();
+  return setColl(settingsTop(),"top")+`<section class="card"><div style="display:flex;align-items:center;gap:10px"><h3 style="margin:0;font-size:1.25rem;flex:1">Banque d'objectifs</h3><button class="btn" data-act="bankOpen">Ouvrir</button></div><p class="muted small" style="margin:4px 0 0">${BANK.length} objectifs avec généralisation et modalités. Cochez-en pour les ajouter à la fiche d'un enfant.</p></section>`+(window.CONS?CONS.settingsHTML():"")+regSettings();
 }
 function ageSheet(k,label){const ag=ageOf(k);const toYM=m=>m==null?"":(Math.floor(m/12)+"."+String(m%12).padStart(2,"0"));
   openSheet(`<h3>Âge attendu</h3><p class="muted small" style="margin:0">${esc(label)}</p><p class="muted small" style="margin:0">Notation années.mois, comme la Talbot : 2.06 = 2 ans 6 mois.</p>
@@ -2370,7 +2513,7 @@ function rowNotes(cid,c,key,noPh){
   const nOpen=openRows.has("n|"+nk)||list.length<=1;
   const head=list.length>1?`<button class="ntog" data-act="toggleRow" data-k="n|${nk}"><span class="car">${nOpen?"▾":"▸"}</span> ${list.length} notes${nOpen?"":` · ${fmtD(list[0].date)} : <span class="nprev">${esc(list[0].text)}</span>`}</button>`:"";
   const rph=noPh?[]:photosOf(c,p=>p.k===key||String(p.k).startsWith(key+".")).sort((a,b)=>(b.d||"").localeCompare(a.d||""));
-  return `<div class="rnotes">${rph.length?`<div class="rphotos"><span class="label">Photos (${rph.length})</span>${thumbs(c,rph,cid)}</div>`:""}${head}${(nOpen?list:[]).map(n=>`<div class="entry"><span class="when">${fmtD(n.date)}</span><span class="txt">${esc(n.text)}${n.src==="groupe"?'<span class="tag">notes collées</span>':n.src==="terrain"?'<span class="tag">terrain · à ranger</span>':""}${byTag(n)}</span><button class="x" aria-label="Supprimer" data-act="delNote" data-id="${cid}" data-n="${n.id}">✕</button></div>`).join("")}
+  return `<div class="rnotes">${rph.length?`<div class="rphotos"><span class="label">Photos (${rph.length})</span>${thumbs(c,rph,cid)}</div>`:""}${head}${(nOpen?list:[]).map(n=>`<div class="entry"><span class="when">${fmtD(n.date)}</span><span class="txt">${esc(n.text)}${n.from?'<span class="tag">tiré d\'une note sur '+esc(n.from)+'</span>':""}${n.src==="groupe"?'<span class="tag">notes collées</span>':n.src==="terrain"&&!n.ranged?'<span class="tag">terrain · à ranger</span>':""}${byTag(n)}</span><button class="x" aria-label="Supprimer" data-act="delNote" data-id="${cid}" data-n="${n.id}">✕</button></div>`).join("")}
   ${open?`<div class="addnote"><textarea class="field" id="${taId}" data-keep="[data-ta=${taId}][data-act=addRowNote]" placeholder="Note sur ce repère (${fmtD(S.obsDate)})"></textarea><div class="row-actions"><button class="btn primary" data-act="addRowNote" data-id="${cid}" data-k="${key}" data-ta="${taId}">Ajouter</button>${micBtn(taId)}<button class="btn ghost" data-act="toggleNote" data-k="${nk}">Fermer</button></div></div>`:""}</div>`;
 }
 function notesHTML(cid,c,secIds,title,ph){const ids=Array.isArray(secIds)?secIds:[secIds];const secId=ids[0];
@@ -2380,7 +2523,7 @@ function notesHTML(cid,c,secIds,title,ph){const ids=Array.isArray(secIds)?secIds
   const selK=cid+"|"+secId,sel=S.selN===selK;
   return `<section class="card" data-nsec="${selK}"><div class="ordhead"><h3 style="font-size:1.3rem;margin-bottom:8px">${esc(title)}</h3>${list.length>1?`<button class="btn ghost small" data-act="selN" data-k="${selK}">${sel?"Annuler":"Sélectionner"}</button>`:""}</div>${sel?`<div class="hidebar" style="position:static"><span>Cochez les notes à supprimer.</span><button class="btn danger small" data-act="delSelN" data-id="${cid}" data-k="${selK}">Supprimer la sélection</button></div>`:""}${nRep?`<p class="muted small" style="margin:0 0 8px">${nRep} note${nRep>1?"s":""} rangée${nRep>1?"s":""} sous leur repère, plus haut.</p>`:""}${photoBlock}
   <div class="addnote"><textarea class="field" id="note-${secId}" data-keep="[data-act=addNote][data-s=${secId}]" placeholder="${esc(ph)}"></textarea><div class="row-actions"><button class="btn primary" data-act="addNote" data-id="${cid}" data-s="${secId}">Ajouter la note (${fmtD(S.obsDate)})</button>${micBtn("note-"+secId)}</div></div>
-  <div class="entries" style="margin-top:10px">${list.map(n=>`<div class="entry">${sel?`<input type="checkbox" class="nsel" value="${n.id}" aria-label="Choisir cette note">`:""}<span class="when">${fmtD(n.date)}</span><span class="txt">${n.k?`<b class="small">${esc(stepLabel(c,n.k))}</b> · `:""}${esc(n.text)}${n.src==="groupe"?'<span class="tag">notes collées</span>':n.src==="terrain"?'<span class="tag">terrain · à ranger</span>':""}${byTag(n)}</span><button class="x" aria-label="Supprimer" data-act="delNote" data-id="${cid}" data-n="${n.id}">✕</button></div>`).join("")||'<p class="muted small">Aucune note dans cette section.</p>'}</div></section>`;
+  <div class="entries" style="margin-top:10px">${list.map(n=>`<div class="entry">${sel?`<input type="checkbox" class="nsel" value="${n.id}" aria-label="Choisir cette note">`:""}<span class="when">${fmtD(n.date)}</span><span class="txt">${n.k?`<b class="small">${esc(stepLabel(c,n.k))}</b> · `:""}${esc(n.text)}${n.from?'<span class="tag">tiré d\'une note sur '+esc(n.from)+'</span>':""}${n.src==="groupe"?'<span class="tag">notes collées</span>':n.src==="terrain"&&!n.ranged?'<span class="tag">terrain · à ranger</span>':""}${byTag(n)}</span><button class="x" aria-label="Supprimer" data-act="delNote" data-id="${cid}" data-n="${n.id}">✕</button></div>`).join("")||'<p class="muted small">Aucune note dans cette section.</p>'}</div></section>`;
 }
 
 function viewPortrait(cid,c){
@@ -2454,7 +2597,9 @@ function eclairGroupSheet(gid){const kids=childrenOf(gid).slice().sort((x,y)=>x[
       const fn=`fiches-eclair-${todayISO()}.html`;if(downloads)await downloads.save({filename:fn,data:new Blob([html],{type:"text/html"})});toast("Version imprimable créée")}})}
 function notesMenu(gid){const g=S.groups.get(gid);const d=S.obsDate;
   if(sample){const n=iaPending(gid).length;openSheet(`<h3>Notes</h3><p class="small" style="margin:0 0 10px">${n?`<b>${n} note${n>1?"s":""}</b> pas encore rangée${n>1?"s":""} ou corrigée${n>1?"s":""}, toutes dates confondues : notes rapides, notes du terrain, notes des fiches et observations.`:"Toutes les notes sont rangées et corrigées."}</p>
-    <div class="row-actions">${iaBtn(gid,true)}<button class="btn" id="nmC">Fermer</button></div>`,s=>{s.querySelector("#nmC").onclick=closeSheet});return}
+    <div class="row-actions">${iaBtn(gid,true)}<button class="btn" id="nmC">Fermer</button></div>
+    <details style="margin-top:12px"><summary class="small"><b>Reprendre le rangement</b> de notes déjà traitées</summary><p class="small muted" style="margin:4px 0">Repasse les notes des fiches avec les règles actuelles (découpage, copie chez les autres enfants, cases). Rien n'est enregistré avant votre relecture.</p>
+      <div class="row-actions" style="align-items:center"><label class="small">Depuis le <input type="date" class="field" id="nmSince" value="${new Date(Date.now()-30*864e5).toISOString().slice(0,10)}" style="width:auto;display:inline-block"></label><button class="btn small" id="nmRedo">✨ Reprendre</button></div></details>`,s=>{s.querySelector("#nmC").onclick=closeSheet;s.querySelector("#nmRedo").onclick=()=>iaRun(gid,{since:s.querySelector("#nmSince").value||"2000-01-01"})});return}
   openSheet(`<h3>Notes</h3><label class="f">Date<input type="date" class="field" id="nmD" value="${d}"></label>
   <div class="nmenu">
    <button class="nmi" id="nmExp"><b>Exporter mes notes du jour</b><span></span></button>
@@ -2568,7 +2713,8 @@ document.addEventListener("click",e=>{
   else if(a==="caSave"){const t=((document.getElementById("caText")||{}).value||"").trim();mutChild(id,x=>{if(t)x.analyse={text:t,maj:todayISO()};else delete x.analyse});toast("Analyse enregistrée")}
   else if(a==="cxLink")linkNoteSheet(id,b.dataset.n);
   else if(a==="cxCat")catSheet(id,b.dataset.n);
-  else if(a==="gBank"||a==="bankOpen")bankSheet();
+  else if(a==="gBank")bankSheet(id);else if(a==="bankOpen")bankSheet();
+  else if(a==="phSort")phSort(id,0);else if(a==="prep")prepSheet(id);else if(a==="retour")retourSheet(id);
   else if(a==="cxUnlink"){mutChild(id,x=>{const n=(x.notes||[]).find(z=>z.id===b.dataset.n);if(n){delete n.cobj;n.obs=1}});toast("Observation remise dans Autres observations")}
   else if(a==="cObjSugg"){mutChild(id,x=>{(x.objectifs=x.objectifs||[]).push({id:uid("o"),label:b.dataset.l,k:k.includes(".")?k:"",occ:k.split(".")[0],date:S.obsDate,marks:{}})});toast("Objectif ajouté")}
   else if(a==="presMark"){const cid=b.dataset.c;mutGroup(id,g=>{g.presences=g.presences||{};const l=g.presences[S.obsDate]||[];g.presences[S.obsDate]=l.includes(cid)?l.filter(x=>x!==cid):l.concat(cid)})}
@@ -2609,6 +2755,7 @@ document.addEventListener("click",e=>{
   else if(a==="notesMenu")notesMenu(id);
   else if(a==="iaAll")iaRun(id);
   else if(a==="gInfo")grpInfoSheet(id);
+  else if(a==="homeLinks")homeLinksSheet();
   else if(a==="gObjHide"){mutGroup(id,x=>{x.hideGObj=true});toast("Retiré. Pour le remettre : Modifier le groupe.")}
   else if(a==="scEdit")scSheet(id);
   else if(a==="regG"){S.regG=k;render()}
@@ -2760,7 +2907,7 @@ async function addPhoto(cid,k,d,file){
     let res;try{res=await assets.upload(blob,{type})}catch(e){if(e&&e.code==="store_unavailable"){await new Promise(r=>setTimeout(r,1200));res=await assets.upload(blob,{type})}else throw e}
     mutChild(cid,x=>{(x.photos=x.photos||[]).push({id:res.id,k,d,at:todayISO()})});toast("Photo ajoutée");return true}
   catch(e){toast(e&&e.code==="too_large"?"Photo trop lourde.":e&&e.code==="quota_or_state"?"L'espace pour les photos est plein.":e&&e.code==="rate_limited"?"Trop d'envois. Réessayez dans un moment.":"L'envoi de la photo a échoué.");return false}}
-function delPhoto(cid,pid,after){confirmSheet("Supprimer cette photo pour de bon ?",async()=>{try{if(assets)await assets.delete(pid)}catch(e){}mutChild(cid,x=>{x.photos=(x.photos||[]).filter(p=>p.id!==pid)});after&&after()})}
+function delPhoto(cid,pid,after){confirmSheet("Supprimer cette photo pour de bon ?",async()=>{const others=[...S.children.entries()].some(([k,x])=>k!==cid&&(x.photos||[]).some(p=>p.id===pid));try{if(assets&&!others)await assets.delete(pid)}catch(e){}mutChild(cid,x=>{x.photos=(x.photos||[]).filter(p=>p.id!==pid)});after&&after()})}
 function miniPh(c,cid,keys){const L=photosOf(c,p=>keys.some(key=>p.k===key||String(p.k).startsWith(key+"."))).sort((a,b)=>(b.d||"").localeCompare(a.d||""));if(!L.length)return "";
   return `<div class="miniph">${L.slice(0,3).map(p=>`<button class="mthumb" data-act="viewPhoto" data-id="${cid}" data-p="${p.id}" aria-label="Voir la photo du ${fmtD(p.d)}"><img src="${blobSrc(p.id)}" data-pid="${p.id}" alt="" loading="lazy"></button>`).join("")}${L.length>3?`<span class="mmore">+${L.length-3}</span>`:""}</div>`}
 function actThumbs(c,ph,phO,cid,sid){if(!ph.length&&!phO.length)return "";const bt=(p,old)=>`<button class="thumb${old?" old":""}" data-act="viewPhoto" data-id="${cid}" data-p="${p.id}" aria-label="Voir la photo${old?" du "+fmtD(p.d):""}"><img src="${blobSrc(p.id)}" data-pid="${p.id}" alt="" loading="lazy">${old?`<span class="phd">${fmtD(p.d)}</span>`:""}</button>`;
@@ -2822,6 +2969,7 @@ function groupSheet(gid,openPart){const g=gid?S.groups.get(gid):{name:"",templat
   ${gid?`<p class="muted small" style="margin:-4px 0 0">Changer de fiche garde les observations communes ; les repères propres à l'autre fiche restent enregistrés mais ne s'affichent plus.</p>`:""}
   ${gid?"":`<label class="f">Enfants (facultatif)<textarea class="field" id="gKids" style="min-height:110px" placeholder="Un prénom par ligne, ou séparés par des virgules"></textarea></label>`}
   ${gid?`<label class="chk"><input type="checkbox" id="gShowObj" ${g.hideGObj?"":"checked"}> Afficher « Objectifs de groupe » sur la page du groupe</label>`:""}
+  ${gid?`<details class="ogdet" style="margin-top:10px"><summary><b>Ajouter des enfants</b></summary><label class="f">Un prénom par ligne<textarea class="field" id="gKids" style="min-height:90px" placeholder="Léa&#10;Noah&#10;Mika"></textarea></label><p class="muted small" style="margin:4px 0 0">Créés à l'enregistrement, avec un animal chacun. Nom de famille et date de naissance : ⚙ dans la fiche, ou remplis par le consentement.</p></details>`:""}
   ${gid?grpInfoForm(g):""}${gid&&window.CONS?CONS.groupFormHTML(g):""}
   <label class="f">Équipe (facultatif)<input class="field" id="gEq" value="${esc(g.equipe||"")}" placeholder="Ex. : ergo + TES"></label>
   <div class="f"><span style="font-weight:600;font-size:.92rem">Emblème</span><div class="avpick" style="grid-template-columns:repeat(4,1fr)">${Object.entries(EMBLEMS).map(([k,em])=>`<button type="button" data-em="${k}" class="${g.emblem===k?"on":""}" title="${em.nom}"><img src="${img(em.img)}" alt="${em.nom}"></button>`).join("")}</div></div>
@@ -2830,7 +2978,8 @@ function groupSheet(gid,openPart){const g=gid?S.groups.get(gid):{name:"",templat
     let em=g.emblem||"mesanges";s.querySelectorAll("[data-em]").forEach(x=>x.onclick=()=>{em=x.dataset.em;s.querySelectorAll("[data-em]").forEach(y=>y.classList.toggle("on",y===x))});
     s.querySelector("#gCancel").onclick=closeSheet;
     s.querySelector("#gSave").onclick=()=>{const name=s.querySelector("#gName").value.trim();if(!name){s.querySelector("#gName").focus();return}
-      const id=gid||uid("g");const obj=Object.assign({journal:[],createdAt:todayISO()},gid?JSON.parse(JSON.stringify(g)):{},{name,template:s.querySelector("#gTpl").value,emblem:em,equipe:s.querySelector("#gEq").value.trim()});grpInfoRead(s,obj);if(window.CONS)CONS.groupFormRead(s,obj);const so=s.querySelector("#gShowObj");if(so){if(so.checked)delete obj.hideGObj;else obj.hideGObj=true}
+      const id=gid||uid("g");const obj=Object.assign({journal:[],createdAt:todayISO()},gid?JSON.parse(JSON.stringify(g)):{},{name,template:s.querySelector("#gTpl").value,emblem:em,equipe:s.querySelector("#gEq").value.trim()});grpInfoRead(s,obj);if(window.CONS)CONS.groupFormRead(s,obj);
+      const gk=s.querySelector("#gKids");if(gk&&gid){const NK=gk.value.split(/\n+/).map(x=>x.trim()).filter(Boolean);const base0=childrenOf(gid).length;NK.forEach((nm,i)=>{const id=uid("c");S.children.set(id,{groupId:gid,name:nm,avatar:AVATARS[(base0+i)%AVATARS.length],checks:{},sout:{},free:{},notes:[],synth:{},facil:{},next:[],createdAt:todayISO()});persist("children",id)});if(NK.length)toast(`${NK.length} enfant${NK.length>1?"s":""} ajouté${NK.length>1?"s":""}`)}const so=s.querySelector("#gShowObj");if(so){if(so.checked)delete obj.hideGObj;else obj.hideGObj=true}
       S.groups.set(id,obj);persist("groups",id);if(!gid)addKids(id,(s.querySelector("#gKids")||{}).value||"");closeSheet();gid?render():go("g-"+id)};
     if(gid)s.querySelector("#gDel").onclick=()=>{const kids=childrenOf(gid);confirmSheet(`Supprimer le groupe ${g.name}${kids.length?" et ses "+kids.length+" fiches":""} ?`,()=>{kids.forEach(([cid])=>{S.children.delete(cid);persist("children",cid)});S.groups.delete(gid);persist("groups",gid);go("accueil")})};
   })}
@@ -3274,7 +3423,7 @@ render();
 if("serviceWorker" in navigator&&location.protocol==="https:")navigator.serviceWorker.register("sw.js").catch(()=>{});
 </script>
 <script>window.SYNC_CFG={"url": "https://lvwotuglgilspssufihp.supabase.co", "key": "sb_publishable_-CD7IcAGCJ9c_bwV7pIhiw_6OZXbFcB"}</script>
-<script src="supabase.js?v=carnet-sync-v13"></script>
-<script src="sync.js?v=carnet-sync-v13"></script>
+<script src="supabase.js?v=carnet-sync-v16"></script>
+<script src="sync.js?v=carnet-sync-v16"></script>
 </body>
 </html>

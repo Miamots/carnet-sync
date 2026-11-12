@@ -300,8 +300,16 @@ const CONS=window.CONS={DESC_DEF:"Le projet a pour but de stimuler les habileté
   groupFormHTML(g){const C=CONS.cfg();const PI=C.items.filter(it=>it.people&&it.on!==false);const orgs=[...new Set(C.annuaire.map(p=>p.org||""))];
     return `<details class="ogdet" style="margin-top:10px"><summary><b>Consentement aux parents</b></summary>
       <label class="f">Description du projet<textarea class="field" id="gCons" style="min-height:110px">${esc(g.consDesc||CONS.DESC_DEF)}</textarea></label>
-      ${PI.map(it=>{const sel=new Set(CONS.pick(g,it).map(p=>p.id));return `<div style="margin-top:10px"><p class="small" style="margin:0 0 4px"><b>${esc(it.t.length>90?it.t.slice(0,88)+"…":it.t)}</b></p>${orgs.map(o=>{const L=C.annuaire.filter(p=>(p.org||"")===o);return L.length?`<div class="small muted" style="margin:4px 0 2px">${esc(o||"Sans organisme")}</div><div class="chips">${L.map(p=>`<label class="chip mini"><input type="checkbox" data-gcp="${esc(it.k)}" value="${esc(p.id)}" ${sel.has(p.id)?"checked":""}> ${esc(CONS.pname(p))}</label>`).join("")}</div>`:""}).join("")}</div>`}).join("")}
+      ${PI.map(it=>{const sel=new Set(CONS.pick(g,it).map(p=>p.id));return `<div style="margin-top:10px" class="gcpi" data-k="${esc(it.k)}"><p class="small" style="margin:0 0 4px"><b>${esc(it.t.length>90?it.t.slice(0,88)+"…":it.t)}</b></p>${orgs.map(o=>{const L=C.annuaire.filter(p=>(p.org||"")===o);return L.length?`<div class="small muted" style="margin:4px 0 2px">${esc(o||"Sans organisme")}</div><div class="chips">${L.map(p=>`<label class="chip mini"><input type="checkbox" data-gcp="${esc(it.k)}" value="${esc(p.id)}" ${sel.has(p.id)?"checked":""}> ${esc(CONS.pname(p))}</label>`).join("")}</div>`:""}).join("")}</div>`}).join("")}
+      ${PI.length?`<div style="margin-top:12px;border-top:1px dashed var(--line);padding-top:8px"><p class="small" style="margin:0 0 4px"><b>Ajouter une personne</b> <span class="muted">(elle s'ajoute à l'annuaire, donc aux autres groupes aussi, sans y être cochée)</span></p>
+        <div class="row" style="gap:6px"><input class="field" id="gaN" placeholder="Nom"><input class="field" id="gaR" placeholder="Rôle"><input class="field" id="gaO" placeholder="Organisme"></div>
+        <div class="row" style="gap:6px;margin-top:6px;align-items:center"><select class="field" id="gaI">${PI.map(it=>`<option value="${esc(it.k)}">${esc(it.t.length>60?it.t.slice(0,58)+"…":it.t)}</option>`).join("")}</select><button type="button" class="btn small" data-gadd="1">Ajouter</button></div></div>`:""}
       <p class="muted small" style="margin:8px 0 0">Annuaire et textes : Paramètres › Consentements.</p></details>`},
+  groupAdd(b){const sh=b.closest(".sheet")||document;const nom=sh.querySelector("#gaN").value.trim();if(!nom){sh.querySelector("#gaN").focus();return}
+    const p={id:"p"+Math.random().toString(36).slice(2,8),nom,role:sh.querySelector("#gaR").value.trim(),org:sh.querySelector("#gaO").value.trim()};const C=CONS.cfg();
+    db.doc("config/cons").set({annuaire:C.annuaire.concat([p]),items:C.items});const k=sh.querySelector("#gaI").value;const box=sh.querySelector(`.gcpi[data-k="${CSS.escape(k)}"]`);
+    if(box)box.insertAdjacentHTML("beforeend",`<div class="chips"><label class="chip mini"><input type="checkbox" data-gcp="${esc(k)}" value="${esc(p.id)}" checked> ${esc(CONS.pname(p))}</label></div>`);
+    ["#gaN","#gaR","#gaO"].forEach(x=>sh.querySelector(x).value="");toast(nom+" ajouté·e à l'annuaire")},
   groupFormRead(s,obj){const gc=s.querySelector("#gCons");if(!gc)return;const v=gc.value.trim();if(v&&v!==CONS.DESC_DEF)obj.consDesc=v;else delete obj.consDesc;
     const cp={};CONS.cfg().items.filter(it=>it.people&&it.on!==false).forEach(it=>{cp[it.k]=[...s.querySelectorAll(`[data-gcp="${CSS.escape(it.k)}"]:checked`)].map(i=>i.value)});obj.consPeople=cp},
   list(c){return (c&&c.consents||[]).slice().sort((a,b)=>String(b.sentAt).localeCompare(String(a.sentAt)))},
@@ -397,6 +405,7 @@ const CONS=window.CONS={DESC_DEF:"Le projet a pour but de stimuler les habileté
 document.addEventListener("click",e=>{const b=e.target.closest("[data-cons]");if(!b)return;e.preventDefault();const a=b.dataset.cons;
   if(a==="send")SYNC.act(()=>CONS.send(b.dataset.id));else if(a==="share")CONS.share(b.dataset.id,b.dataset.r);else if(a==="view")CONS.view(b.dataset.id,b.dataset.r);
   else if(a==="paper")CONS.paper(b.dataset.id);else if(a==="group")CONS.groupSheet(b.dataset.id);else if(a==="pdf")CONS.openFile(b.dataset.f)});
+document.addEventListener("click",e=>{const b=e.target.closest("[data-gadd]");if(!b)return;e.preventDefault();CONS.groupAdd(b)});
 document.addEventListener("click",e=>{const b=e.target.closest("[data-cset]");if(!b)return;e.preventDefault();CONS.settingsAct(b.dataset.cset,b)});
 
 document.addEventListener("click",e=>{const t=e.target.closest("[data-sync]");if(!t)return;e.preventDefault();SYNC.open()});
