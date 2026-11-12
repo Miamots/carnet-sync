@@ -1102,13 +1102,14 @@ function viewHome(){
   let h=`<section class="card"><h2 style="font-size:1.6rem;margin-bottom:4px">Mes groupes</h2><p class="muted small" style="margin:0 0 12px">Choisissez un groupe pour voir les enfants et leurs fiches.</p><div class="grid">`;
   gs.forEach(([id,g])=>{const n=[...S.children.values()].filter(c=>c.groupId===id).length;const em=EMBLEMS[g.emblem]||EMBLEMS.roue;
     h+=`<a class="tile" href="#g-${id}"><img src="${img(em.img)}" alt=""><h3>${esc(g.name)}</h3><span class="meta">Fiche ${esc(tpl(g).nom)} · ${n} enfant${n>1?"s":""}</span></a>`});
-  h+=`<button class="tile add" data-act="newGroup"><span class="plus">+</span>Nouveau groupe</button></div>${homeLinks()}</section>`;
+  h+=`<button class="tile add" data-act="newGroup"><span class="plus">+</span>Nouveau groupe</button></div></section>`;
   if(window.SYNC)h+=SYNC.card();
   if(window.CARNET_LOCAL){const ba=LOCAL.meta.backupAt;h+=`<section class="card"><details class="ogdet" data-dk="backup" ${openDetails.has("backup")?"open":""}><summary><h3 style="font-size:1.35rem;display:inline">Sauvegarde et partage</h3> <span class="muted small">${ba?"dernière : "+fmtD(String(ba).slice(0,10)):"aucune encore"}</span></summary><p class="muted small" style="margin:2px 0 10px">Le carnet garde tout sur cet appareil, sans rien envoyer en ligne. Sauvegardez régulièrement et gardez le fichier en lieu sûr. Pour travailler à deux : envoyez votre sauvegarde à votre collègue, qui la <b>fusionne</b> avec son carnet. ${ba?"Dernière sauvegarde : "+fmtD(ba,true)+".":"Aucune sauvegarde pour l'instant."}</p>
   <div class="row-actions"><button class="btn primary" data-act="backupLight">Sauvegarde texte</button><button class="btn" data-act="backupPh">Sauvegarde des photos${(()=>{const n=newPhotoCount();return n?" ("+n+" nouvelle"+(n>1?"s":"")+")":""})()}</button><button class="btn ghost small" data-act="backup">Tout en un fichier</button></div>
   <p class="muted small" style="margin:6px 0 0">La <b>sauvegarde texte</b> est légère : faites-la souvent (toutes les notes, cases, objectifs). La <b>sauvegarde des photos</b> ne prend que les photos ajoutées depuis la dernière fois. ${LOCAL.meta.photoAt?"Dernière sauvegarde des photos : "+fmtD(LOCAL.meta.photoAt,true)+".":""}</p>
   <p class="muted small" id="storeInfo" style="margin:4px 0 0"></p>
   <div class="row-actions" style="margin-top:8px"><label class="btn">Fusionner une sauvegarde<input type="file" accept=".json,application/json" hidden data-act="mergeFile"></label><label class="btn">Restaurer (remplacer tout)<input type="file" accept=".json,application/json" hidden data-act="restoreFile"></label></div></details></section>`}
+  h+=homeLinks();
   return h;
 }
 
@@ -1797,7 +1798,7 @@ function todayHTML(gid,g,kids){const d=S.obsDate;const pr=presOf(g,d)||[];const 
   <div class="tgrid">${sk.map(([cid,c])=>{const done=dayTouched(c,d);const isP=pr.includes(cid);
     return `<div class="tkw${isP?" pres":""}"><a class="tkid" href="#e-${cid}"><span class="tav"><img src="${avSrc(c)}"${avAt(c)} alt=""></span><b>${starH(c)}${esc(c.name)}</b></a><button class="tpres${isP?" on":""}" data-act="presMark" data-id="${gid}" data-c="${cid}" aria-pressed="${isP}" aria-label="${esc(c.name)} ${isP?"présent":"absent"}">${isP?"✓ présent":"présent ?"}</button></div>`}).join("")}</div>
   ${kids.length?"":`<p class="muted small">Aucun enfant pour l'instant.</p>`}
-  <div class="row-actions" style="margin-top:10px"><button class="btn small primary" data-act="gObjAll" data-id="${gid}">Objectifs des enfants</button><button class="btn small" data-act="gEval" data-id="${gid}">Évaluation et PI</button><button class="btn small" data-act="gBank" data-id="${gid}">Banque d'objectifs</button><button class="btn small" data-act="newChild" data-id="${gid}">+ Un enfant</button><button class="btn small" data-act="bulkKids" data-id="${gid}">+ Plusieurs</button></div>
+  <div class="row-actions" style="margin-top:10px"><button class="btn small primary" data-act="gObjAll" data-id="${gid}">Objectifs des enfants</button><button class="btn small" data-act="gEval" data-id="${gid}">Évaluation et PI</button></div>
   ${pd.length?det("pt-"+gid,`Tableau des présences (${pd.length} rencontre${pd.length>1?"s":""})`,`<div class="cov-wrap"><table class="cov ptab"><thead><tr><th></th><th>Total</th>${pd.slice().reverse().map(x=>`<th><span>${fmtD(x)}</span></th>`).join("")}</tr></thead><tbody>${kids.map(([cid,c])=>{const n=pd.filter(x=>g.presences[x].includes(cid)).length;return `<tr><th><a href="#e-${cid}">${esc(c.name)}</a></th><td class="ptot">${n}/${pd.length}</td>${pd.slice().reverse().map(x=>{const on=g.presences[x].includes(cid);return `<td class="${on?"pon":"poff"}">${on?"✓":"·"}</td>`}).join("")}</tr>`}).join("")}<tr class="psum"><th>Présents</th><td></td>${pd.slice().reverse().map(x=>`<td>${g.presences[x].length}</td>`).join("")}</tr></tbody></table></div>`):""}</section>`}
 function presenceHTML(gid,g,kids){const p=presOf(g,S.obsDate)||[];S.prInit=S.prInit||new Set();if(!S.prInit.has(gid)){openDetails.add("pr-"+gid);S.prInit.add(gid)}
   return `<section class="card"><details class="ogdet" data-dk="pr-${gid}" ${openDetails.has("pr-"+gid)?"open":""}><summary><h3 style="font-size:1.35rem;display:inline">Présences</h3> <span class="muted small">${p.length} le ${fmtD(S.obsDate)}</span></summary><div class="ordhead" style="margin-top:6px"><span></span><label class="obsdate small"><span class="label">Date</span><input type="date" value="${S.obsDate}" data-act="obsDate"></label></div>
@@ -1888,7 +1889,11 @@ function quickNote(gid,cid){const kids=childrenOf(gid);const sel=new Set(cid?[ci
     const mb=s.querySelector('[data-act="dictate"]');if(mb&&SR)setTimeout(()=>dictate("qnText",mb),250)})}
 function homeLinksGet(){try{const d=typeof LOCAL!=="undefined"&&LOCAL.cache&&LOCAL.cache.get("config/liens");if(d&&Array.isArray(d.liens))return d.liens;return JSON.parse(localStorage.getItem("carnet-liens")||"[]")}catch(e){return []}}
 function homeLinks(){const L=homeLinksGet().filter(x=>x&&x.url);
-  return `<div class="row-actions" style="margin-top:12px;align-items:center">${L.map(x=>`<a class="btn small" href="${esc(/^https?:\/\//.test(x.url)?x.url:"https://"+x.url)}" target="_blank" rel="noopener" style="text-decoration:none">🔗 ${esc(x.t||"Lien")}</a>`).join("")}<button class="btn ghost small" data-act="homeLinks">${L.length?"✎ Liens":"+ Ajouter un lien (Padlet…)"}</button></div>`}
+  if(!L.length)return `<div class="row-actions" style="margin:4px 0 12px"><button class="btn ghost small" data-act="homeLinks">+ Ajouter un lien (Padlet…)</button></div>`;
+  return `<section class="card"><div style="display:flex;align-items:center;gap:8px"><h3 style="margin:0;font-size:1.35rem;flex:1">Liens</h3><button class="btn ghost small" data-act="homeLinks">✎ Modifier</button></div>
+    <div style="display:flex;gap:22px;flex-wrap:wrap;margin-top:10px">${L.map(x=>`<a href="${esc(/^https?:\/\//.test(x.url)?x.url:"https://"+x.url)}" target="_blank" rel="noopener" style="text-decoration:none;color:inherit;text-align:center;width:120px">
+      <span style="display:flex;align-items:center;justify-content:center;width:112px;height:112px;margin:0 auto;border-radius:50%;background:#F4EEDF;border:3px solid var(--forest,#3D6A4A);box-shadow:0 2px 6px rgba(0,0,0,.12)"><img src="${ICW("obj-nature")}" alt="" style="width:78px;height:auto"></span>
+      <b style="display:block;margin-top:6px;font-size:1.05rem">${esc(x.t||"Lien")}</b></a>`).join("")}</div></section>`}
 function homeLinksSheet(){const L=homeLinksGet().concat([{}]);const row=x=>`<div class="row hl" style="gap:6px;margin:4px 0"><input class="field" placeholder="Titre (ex. : Padlet sorties nature)" value="${esc(x.t||"")}"><input class="field" placeholder="Adresse (https://…)" inputmode="url" value="${esc(x.url||"")}"></div>`;
   openSheet(`<h3>Liens utiles</h3><p class="muted small" style="margin:0">Affichés sur la page d'accueil, sur tous vos appareils et ceux de votre collègue.</p><div id="hlL">${L.map(row).join("")}</div><button type="button" class="btn ghost small" id="hlAdd">+ Un lien</button>
     <div class="row-actions"><button class="btn primary" id="hlOk">Enregistrer</button><button class="btn" id="hlNo">Annuler</button></div>`,s=>{
@@ -2977,7 +2982,7 @@ function groupSheet(gid,openPart){const g=gid?S.groups.get(gid):{name:"",templat
   ${gid?`<p class="muted small" style="margin:-4px 0 0">Changer de fiche garde les observations communes ; les repères propres à l'autre fiche restent enregistrés mais ne s'affichent plus.</p>`:""}
   ${gid?"":`<label class="f">Enfants (facultatif)<textarea class="field" id="gKids" style="min-height:110px" placeholder="Un prénom par ligne, ou séparés par des virgules"></textarea></label>`}
   ${gid?`<label class="chk"><input type="checkbox" id="gShowObj" ${g.hideGObj?"":"checked"}> Afficher « Objectifs de groupe » sur la page du groupe</label>`:""}
-  ${gid?`<details class="ogdet" style="margin-top:10px"><summary><b>Ajouter des enfants</b></summary><label class="f">Un prénom par ligne<textarea class="field" id="gKids" style="min-height:90px" placeholder="Léa&#10;Noah&#10;Mika"></textarea></label><p class="muted small" style="margin:4px 0 0">Créés à l'enregistrement, avec un animal chacun. Nom de famille et date de naissance : ⚙ dans la fiche, ou remplis par le consentement.</p></details>`:""}
+  ${gid?`<div style="margin-top:10px"><p class="label" style="margin:0 0 4px">Enfants du groupe</p><div class="row-actions" style="margin:0"><button type="button" class="btn small" data-act="newChild" data-id="${gid}">+ Un enfant</button><button type="button" class="btn small" data-act="bulkKids" data-id="${gid}">+ Plusieurs</button></div></div>`:""}
   ${gid?grpInfoForm(g):""}${gid&&window.CONS?CONS.groupFormHTML(g):""}
   <label class="f">Équipe (facultatif)<input class="field" id="gEq" value="${esc(g.equipe||"")}" placeholder="Ex. : ergo + TES"></label>
   <div class="f"><span style="font-weight:600;font-size:.92rem">Emblème</span><div class="avpick" style="grid-template-columns:repeat(4,1fr)">${Object.entries(EMBLEMS).map(([k,em])=>`<button type="button" data-em="${k}" class="${g.emblem===k?"on":""}" title="${em.nom}"><img src="${img(em.img)}" alt="${em.nom}"></button>`).join("")}</div></div>
@@ -3431,7 +3436,7 @@ render();
 if("serviceWorker" in navigator&&location.protocol==="https:")navigator.serviceWorker.register("sw.js").catch(()=>{});
 </script>
 <script>window.SYNC_CFG={"url": "https://lvwotuglgilspssufihp.supabase.co", "key": "sb_publishable_-CD7IcAGCJ9c_bwV7pIhiw_6OZXbFcB"}</script>
-<script src="supabase.js?v=carnet-sync-v19"></script>
-<script src="sync.js?v=carnet-sync-v19"></script>
+<script src="supabase.js?v=carnet-sync-v20"></script>
+<script src="sync.js?v=carnet-sync-v20"></script>
 </body>
 </html>
