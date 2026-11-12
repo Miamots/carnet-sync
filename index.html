@@ -1209,7 +1209,7 @@ function terrainKid(gid,cid){const g=S.groups.get(gid);const c=S.children.get(ci
   const objs=childObjs(c).filter(o=>!o.done);const gobjs=g.objectifs||[];const res=objRes(g,d);const ao=[];
   const notesT=(c.notes||[]).filter(n=>n.date===d);const phT=photosOf(c,p=>p.d===d);
   const tri=isObjOnly(c);const mk=(v,cur,attrs)=>v==="ok"?`<button class="tm odot ${cur||"vide"}" ${attrs} data-cyc="1" aria-label="Changer le niveau">${cur?omk(cur):""}</button>`:"";
-  openSheet(`<div class="thead"><img src="${avSrc(c)}"${avAt(c)} alt=""><div><h3 style="margin:0">${starH(c)}${esc(c.name)}</h3><span class="muted small">${esc(fmtD(d,true))}</span></div></div>${(()=>{const t=((g.prochaine||{}).enfants||{})[cid];return t?`<div class="notice small" style="margin:6px 0">📋 ${esc(t)}</div>`:""})()}
+  openSheet(`<div class="thead"><img src="${avSrc(c)}"${avAt(c)} alt=""><div><h3 style="margin:0">${starH(c)}${esc(c.name)}</h3><span class="muted small">${esc(fmtD(d,true))}</span></div></div>${(()=>{const L=ppL(((g.prochaine||{}).enfants||{})[cid]);return L.length?`<div class="notice small" style="margin:6px 0">📋 ${L.map(esc).join(" · ")}</div>`:""})()}
   ${objs.length||gobjs.length?`<div class="tobjs">${objs.map(o=>{const v=(o.marks||{})[d]||"";return `<div class="tobj"><span title="${esc(o.label)}">🎯 ${esc(objShort(o))}</span>${mk("ok",v,`data-co="${o.id}"`)}${mk("no",v,`data-co="${o.id}"`)}</div>${tri?objCtxHTML(cid,c,o,d,'data-ctx="1"'):""}`}).join("")}
     ${gobjs.map(o=>{const v=(res[o.id]||{})[cid]||"";return `<div class="tobj grp"><span>${esc(o.label)} <span class="muted small">(groupe)</span></span>${mk("ok",v,`data-go="${o.id}"`)}${mk("no",v,`data-go="${o.id}"`)}</div>`}).join("")}</div>`:""}
   ${ao.length?`<div class="small">${ao.map(x=>`<div>${AOI[x.t]} ${esc(x.label)}${x.t==="occ"?(x.since?` <span class="muted">(dernière fois ${fmtD(x.since)})</span>`:` <span class="muted">(jamais)</span>`):""}</div>`).join("")}</div>`:""}
@@ -1405,38 +1405,47 @@ function phSort(gid,idx){const g=S.groups.get(gid);const L=(g&&g.photoInbox)||[]
 function objFrise(o,max){const M=Object.entries(o.marks||{}).filter(x=>x[1]).sort((a,b)=>a[0].localeCompare(b[0])).slice(-(max||12));if(!M.length)return "";
   return `<div class="ofrise" style="display:flex;gap:6px;overflow-x:auto;align-items:flex-end;margin:6px 0 2px;padding-bottom:2px">${M.map(([d,v])=>`<div style="text-align:center;flex:0 0 auto"><div style="height:30px">${omk(v)}</div><div class="small muted" style="font-size:.7rem;line-height:1">${new Date(d+"T12:00").toLocaleDateString("fr-CA",{day:"numeric",month:"short"})}</div></div>`).join(`<div style="flex:0 0 10px;border-top:2px dotted #CFC6B3;margin-bottom:18px"></div>`)}</div>`}
 /* Prochaine rencontre */
-function prepCardHTML(gid){const g=S.groups.get(gid);const P=g&&g.prochaine;if(!P||(!String(P.groupe||"").trim()&&!Object.values(P.enfants||{}).some(t=>String(t||"").trim())))return "";
-  const kids=childrenOf(gid).filter(([k])=>String((P.enfants||{})[k]||"").trim());
+const ppL=v=>Array.isArray(v)?v.map(x=>String(x||"").trim()).filter(Boolean):String(v||"").split(/\n+/).map(x=>x.replace(/^\s*[-•*]\s*/,"").trim()).filter(Boolean);
+function prepCardHTML(gid){const g=S.groups.get(gid);const P=g&&g.prochaine;if(!P)return "";const G=ppL(P.groupe);const E=P.enfants||{};
+  const kids=childrenOf(gid).filter(([k])=>ppL(E[k]).length);if(!G.length&&!kids.length)return "";
+  const li=(t,wk,i)=>`<li style="margin:2px 0">${esc(t)} <button class="x" data-act="ppDel" data-id="${gid}" data-w="${wk}" data-i="${i}" aria-label="Retirer" style="font-size:.8rem;opacity:.6">✕</button></li>`;
   return `<section class="card" style="border-left:4px solid var(--sun,#E8B84A)"><div style="display:flex;align-items:center;gap:8px"><h3 style="margin:0;font-size:1.2rem;flex:1">📋 Prochaine rencontre</h3><button class="btn ghost small" data-act="prep" data-id="${gid}">Modifier</button></div>
-    ${String(P.groupe||"").trim()?`<p style="margin:6px 0;white-space:pre-wrap">${esc(P.groupe)}</p>`:""}
-    ${kids.length?`<details><summary class="small"><b>Pour chaque enfant (${kids.length})</b></summary>${kids.map(([k,c])=>`<p class="small" style="margin:6px 0"><b>${esc(c.name)}</b> : ${esc(P.enfants[k])}</p>`).join("")}</details>`:""}
+    ${G.length?`<ul style="margin:6px 0 4px 18px;padding:0">${G.map((t,i)=>li(t,"g",i)).join("")}</ul>`:""}
+    ${kids.length?`<details><summary class="small"><b>Pour chaque enfant (${kids.length})</b></summary>${kids.map(([k,c])=>`<p class="small" style="margin:6px 0 0"><b>${esc(c.name)}</b></p><ul class="small" style="margin:0 0 0 18px;padding:0">${ppL(E[k]).map((t,i)=>li(t,k,i)).join("")}</ul>`).join("")}</details>`:""}
     ${P.maj?`<p class="muted small" style="margin:4px 0 0">Préparé le ${fmtD(P.maj)}${P.by?" par "+esc(P.by):""}</p>`:""}</section>`}
+function ppDel(gid,w,i){mutGroup(gid,x=>{const P=x.prochaine;if(!P)return;if(w==="g"){const L=ppL(P.groupe);L.splice(+i,1);P.groupe=L}else{P.enfants=P.enfants||{};const L=ppL(P.enfants[w]);L.splice(+i,1);if(L.length)P.enfants[w]=L;else delete P.enfants[w]}})}
 function prepPrompt(gid){const g=S.groups.get(gid);const kids=childrenOf(gid);
   const J=(g.journal||[]).slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,3).map(j=>`- ${j.date} : ${String(j.text).slice(0,500)}`).join("\n");
   const K=kids.map(([k,c])=>{const N=(c.notes||[]).filter(n=>String(n.text||"").trim()).sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,6).map(n=>`  - ${n.date} : ${noteTxt(c,n).slice(0,350)}`).join("\n");
     const O=childObjs(c).filter(o=>!o.done).map(o=>`  objectif : ${objShort(o)}${o.strat?" (stratégies : "+String(o.strat).slice(0,200)+")":""}`).join("\n");return `${c.name}\n${O||"  (aucun objectif)"}\n${N||"  (aucune note récente)"}`}).join("\n\n");
-  return `Tu prépares la prochaine rencontre d'un groupe de classe nature (${g.name}), animé par une ergothérapeute et une éducatrice spécialisée.
-1. Pour le GROUPE : en 2 à 5 lignes, ce qu'il serait utile de prévoir (activité ou thème, aménagement de l'environnement, matériel, transitions), à partir des notes et du journal. Reste concret et réaliste.
-2. Pour CHAQUE ENFANT : un mémo de 1 à 3 phrases à lire avant de partir : l'objectif à observer, ce qui l'a aidé récemment, un point à surveiller. Rien d'inventé ; si on manque d'information, dis-le en quelques mots.
+  return `Tu prépares la prochaine rencontre d'un groupe de classe nature (${g.name}), animé par une ergothérapeute et une éducatrice spécialisée. Écris en courts points (style télégraphique, quelques mots chacun).
+1. Pour le GROUPE : 2 à 5 points utiles à prévoir (activité ou thème, aménagement de l'environnement, matériel, transitions), à partir des notes et du journal. Concret et réaliste.
+2. Pour CHAQUE ENFANT : 1 à 3 points à lire avant de partir (objectif à observer, ce qui l'a aidé récemment, point à surveiller). Rien d'inventé.
 JOURNAL DU GROUPE
 ${J||"(vide)"}
 
 ENFANTS
 ${K}
 
-Réponds seulement en JSON : {"groupe":"…","enfants":{"Prénom":"…"}}`}
+Réponds seulement en JSON : {"groupe":["point","point"],"enfants":{"Prénom":["point","point"]}}`}
 function prepSheet(gid){const g=S.groups.get(gid);const P=g.prochaine||{};const kids=childrenOf(gid);
-  openSheet(`<h3>📋 Prochaine rencontre</h3><p class="muted small" style="margin:0">S'affiche en haut de la vue du jour, pour vous et votre collègue.</p>
+  const row=(w,t)=>`<div class="row ppr" data-w="${w}" style="gap:6px;margin:4px 0;align-items:center"><span>•</span><input class="field" value="${esc(t||"")}" placeholder="Un point…"><button type="button" class="btn ghost small" data-ppx aria-label="Retirer">✕</button></div>`;
+  const list=(w,L)=>`<div class="ppl" data-w="${w}">${L.map(t=>row(w,t)).join("")}</div><button type="button" class="btn ghost small" data-ppadd="${w}">+ Un point</button>`;
+  openSheet(`<h3>📋 Prochaine rencontre</h3><p class="muted small" style="margin:0">En points, en haut de la page du groupe, pour vous et votre collègue.</p>
     ${sample?`<div class="row-actions"><button class="btn" id="ppAI">✨ Proposer à partir des notes</button></div>`:""}
-    <label class="f">Pour le groupe <span class="muted small">(activité, aménagement, matériel…)</span><textarea class="field" id="ppG" style="min-height:90px" placeholder="Ex. : cuisine sur le feu; moins d'outils à disposition; prévoir le capybara pour le retour">${esc(P.groupe||"")}</textarea></label>
-    <details ${Object.values(P.enfants||{}).some(t=>t)?"open":""}><summary class="small"><b>Pour chaque enfant</b></summary>${kids.map(([k,c])=>`<label class="f small">${esc(c.name)}<textarea class="field" data-ppk="${k}" style="min-height:52px">${esc((P.enfants||{})[k]||"")}</textarea></label>`).join("")}</details>
-    <div class="row-actions"><button class="btn primary" id="ppOk">Enregistrer</button><button class="btn" id="ppNo">Annuler</button><button class="btn ghost small" id="ppClr" style="margin-left:auto">Effacer</button></div>`,s=>{
+    <p class="label" style="margin:10px 0 2px">Pour le groupe</p>${list("g",ppL(P.groupe).concat(ppL(P.groupe).length?[]:[""]))}
+    <details ${Object.values(P.enfants||{}).some(t=>ppL(t).length)?"open":""} style="margin-top:10px"><summary class="small"><b>Pour chaque enfant</b></summary>${kids.map(([k,c])=>`<p class="small" style="margin:8px 0 0"><b>${esc(c.name)}</b></p>${list(k,ppL((P.enfants||{})[k]))}`).join("")}</details>
+    <div class="row-actions"><button class="btn primary" id="ppOk">Enregistrer</button><button class="btn" id="ppNo">Annuler</button><button class="btn ghost small" id="ppClr" style="margin-left:auto">Tout effacer</button></div>`,s=>{
+      const bindX=()=>s.querySelectorAll("[data-ppx]").forEach(b=>b.onclick=()=>b.closest(".ppr").remove());bindX();
+      const add=(w,t)=>{const box=s.querySelector(`.ppl[data-w="${CSS.escape(w)}"]`);if(!box)return;const empty=[...box.querySelectorAll("input")].find(i=>!i.value.trim());if(empty&&t!==undefined){empty.value=t;return}box.insertAdjacentHTML("beforeend",row(w,t||""));bindX();if(t===undefined)box.lastElementChild.querySelector("input").focus()};
+      s.querySelectorAll("[data-ppadd]").forEach(b=>b.onclick=()=>add(b.dataset.ppadd));
       s.querySelector("#ppNo").onclick=closeSheet;
       s.querySelector("#ppClr").onclick=()=>{mutGroup(gid,x=>{delete x.prochaine});closeSheet();toast("Effacé")};
-      s.querySelector("#ppOk").onclick=()=>{const E={};s.querySelectorAll("[data-ppk]").forEach(t=>{if(t.value.trim())E[t.dataset.ppk]=t.value.trim()});mutGroup(gid,x=>{x.prochaine={groupe:s.querySelector("#ppG").value.trim(),enfants:E,maj:todayISO(),by:getMe()}});closeSheet();toast("Prochaine rencontre enregistrée")};
+      s.querySelector("#ppOk").onclick=()=>{const G=[],E={};s.querySelectorAll(".ppr").forEach(r=>{const t=r.querySelector("input").value.trim();if(!t)return;const w=r.dataset.w;if(w==="g")G.push(t);else (E[w]=E[w]||[]).push(t)});
+        mutGroup(gid,x=>{x.prochaine={groupe:G,enfants:E,maj:todayISO(),by:getMe()}});closeSheet();toast("Prochaine rencontre enregistrée")};
       const ai=s.querySelector("#ppAI");if(ai)ai.onclick=async()=>{ai.disabled=true;ai.innerHTML='<span class="spinner"></span> Préparation…';
-        try{const r=await sample.json(prepPrompt(gid),{modelTier:"default",max:4000});if(r&&r.groupe&&!s.querySelector("#ppG").value.trim())s.querySelector("#ppG").value=String(r.groupe).trim();else if(r&&r.groupe)s.querySelector("#ppG").value+="\n"+String(r.groupe).trim();
-          Object.entries((r&&r.enfants)||{}).forEach(([nm,t])=>{const k=iaKid(gid,nm);const ta=k&&s.querySelector(`[data-ppk="${k}"]`);if(ta&&!ta.value.trim())ta.value=String(t).trim()});s.querySelector("details").open=true;toast("Proposition prête : relisez et ajustez")}
+        try{const r=await sample.json(prepPrompt(gid),{modelTier:"default",max:4000});ppL(r&&r.groupe).forEach(t=>add("g",t));
+          Object.entries((r&&r.enfants)||{}).forEach(([nm,L])=>{const k=iaKid(gid,nm);if(k)ppL(L).forEach(t=>add(k,t))});s.querySelector("details").open=true;toast("Proposition prête : retirez ou ajoutez des points")}
         catch(e){toast("La préparation n'a pas fonctionné"+(e&&e.message?" : "+e.message:"."))}ai.disabled=false;ai.textContent="✨ Proposer à partir des notes"}})}
 /* Retour de sortie */
 function consOK(c,k){const L=(c.consents||[]).filter(r=>r.status==="signe").sort((a,b)=>String(b.signedAt).localeCompare(String(a.signedAt)));const r=L[0];if(!r)return false;if(r.type==="papier")return null;return !!(r.data&&r.data.rep&&r.data.rep[k])}
@@ -2181,8 +2190,7 @@ function rowHTML(cid,c,s,r,rank){
       return `<span class="cpw${hidK(i)?" hid":""}"><button class="cpill${on?" on":""}${td?" td":""}" data-act="cRep" data-id="${cid}" data-k="${kk}" aria-pressed="${on}">${esc(stT(st))}${a.length>1?` <small>×${a.length}</small>`:""}${np?` <small>${CAM}${np}</small>`:""}</button>${on?`<button class="cpi" data-act="cStep" data-id="${cid}" data-k="${kk}" data-l="${esc(stT(st))}" aria-label="Détails et historique">${CLOCK}</button>`:""}</span>`}).join("")}</div>${hidLink}`;
   } else {
     const fi=(c.fint||{})[key]||{};const LV=r.steps.map((st,i)=>lvlOfC(c,key+"."+stK(st,i)));
-    h+=r.noInt?"":`<div class="fint1">${CINT.map((n,i)=>`<button class="fp fi${fi.int===i?" on":""}" data-act="cInt" data-id="${cid}" data-k="${key}" data-v="${i}">${chrt(i)} ${n}</button>`).join("")}</div>
-
+    h+=(r.noInt?"":`<div class="fint1">${CINT.map((n,i)=>`<button class="fp fi${fi.int===i?" on":""}" data-act="cInt" data-id="${cid}" data-k="${key}" data-v="${i}">${chrt(i)} ${n}</button>`).join("")}</div>`)+`
     <div class="fsteps">${vis.map(i=>{const st=r.steps[i];const t=stT(st);const kk=key+"."+stK(st,i);const l=LV[i];const now=lvlOnC(c,kk,S.obsDate);const nyT=((c.notyet||{})[kk]||[]).includes(S.obsDate);const ag=AON?ageOf(kk):null;const agc=ag?ageClass(ag,mo,l>0):"";const np=phN(kk);
       return `<div class="fst${hidK(i)?" hid":""}"><button class="fdot ${l===3?"a":l?"e":""}${now?" td":""}" data-act="cLv" data-id="${cid}" data-k="${kk}" aria-label="Changer le niveau : ${esc(t)}"><img src="${ICW("st-"+(l===3?2:l?1:0))}" alt=""></button><div class="fsb"><button class="fstt${l?"":" f"}" data-act="cStep" data-id="${cid}" data-k="${kk}" data-l="${esc(t)}">${esc(t)}${stEx(st)}${l?` <span class="flv l${l}">${CLV[l].toLowerCase()}</span>`:""}${nyT?` <span class="flv ny">pas encore</span>`:""}${np?` <span class="phc">${CAM} ${np}</span>`:""}${ag?` <span class="agl ${agc}">${ageLabel(ag)}</span>`:""}</button></div></div>`}).join("")}</div>${hidLink}`;
   }
@@ -2714,7 +2722,7 @@ document.addEventListener("click",e=>{
   else if(a==="cxLink")linkNoteSheet(id,b.dataset.n);
   else if(a==="cxCat")catSheet(id,b.dataset.n);
   else if(a==="gBank")bankSheet(id);else if(a==="bankOpen")bankSheet();
-  else if(a==="phSort")phSort(id,0);else if(a==="prep")prepSheet(id);else if(a==="retour")retourSheet(id);
+  else if(a==="phSort")phSort(id,0);else if(a==="prep")prepSheet(id);else if(a==="ppDel")ppDel(id,b.dataset.w,b.dataset.i);else if(a==="retour")retourSheet(id);
   else if(a==="cxUnlink"){mutChild(id,x=>{const n=(x.notes||[]).find(z=>z.id===b.dataset.n);if(n){delete n.cobj;n.obs=1}});toast("Observation remise dans Autres observations")}
   else if(a==="cObjSugg"){mutChild(id,x=>{(x.objectifs=x.objectifs||[]).push({id:uid("o"),label:b.dataset.l,k:k.includes(".")?k:"",occ:k.split(".")[0],date:S.obsDate,marks:{}})});toast("Objectif ajouté")}
   else if(a==="presMark"){const cid=b.dataset.c;mutGroup(id,g=>{g.presences=g.presences||{};const l=g.presences[S.obsDate]||[];g.presences[S.obsDate]=l.includes(cid)?l.filter(x=>x!==cid):l.concat(cid)})}
@@ -3423,7 +3431,7 @@ render();
 if("serviceWorker" in navigator&&location.protocol==="https:")navigator.serviceWorker.register("sw.js").catch(()=>{});
 </script>
 <script>window.SYNC_CFG={"url": "https://lvwotuglgilspssufihp.supabase.co", "key": "sb_publishable_-CD7IcAGCJ9c_bwV7pIhiw_6OZXbFcB"}</script>
-<script src="supabase.js?v=carnet-sync-v16"></script>
-<script src="sync.js?v=carnet-sync-v16"></script>
+<script src="supabase.js?v=carnet-sync-v18"></script>
+<script src="sync.js?v=carnet-sync-v18"></script>
 </body>
 </html>
