@@ -1896,7 +1896,7 @@ function homeLinksSheet(){const L=homeLinksGet().concat([{}]);const row=x=>`<div
       s.querySelector("#hlOk").onclick=async()=>{const liens=[...s.querySelectorAll(".hl")].map(r=>{const i=r.querySelectorAll("input");return {t:i[0].value.trim(),url:i[1].value.trim()}}).filter(x=>x.url);
         try{localStorage.setItem("carnet-liens",JSON.stringify(liens))}catch(e){}if(window.CARNET_LOCAL&&db)await db.doc("config/liens").set({liens});closeSheet();render();toast("Liens enregistrés")}})}
 function grpBar(gid,g){const L=(g.liens||[]).filter(x=>x&&x.url);
-  return `<div class="row-actions" style="margin-top:10px"><button class="btn small" data-act="gInfo" data-id="${gid}">ℹ️ Infos du groupe</button><button class="btn small" data-act="prep" data-id="${gid}">📋 Prochaine rencontre</button>${L.map(x=>`<a class="btn small" href="${esc(/^https?:\/\//.test(x.url)?x.url:"https://"+x.url)}" target="_blank" rel="noopener" style="text-decoration:none">🔗 ${esc(x.t||"Lien")}</a>`).join("")}${window.CONS?`<button class="btn small" data-cons="group" data-id="${gid}">Consentements</button>`:""}</div>`}
+  return `<div class="row-actions" style="margin-top:10px"><button class="btn small" data-act="gInfo" data-id="${gid}">ℹ️ Infos du groupe</button><button class="btn small" data-act="prep" data-id="${gid}">📋 Prochaine rencontre</button>${sample?`<button class="btn small" data-act="retour" data-id="${gid}">✨ Retour de sortie</button>`:""}${L.map(x=>`<a class="btn small" href="${esc(/^https?:\/\//.test(x.url)?x.url:"https://"+x.url)}" target="_blank" rel="noopener" style="text-decoration:none">🔗 ${esc(x.t||"Lien")}</a>`).join("")}${window.CONS?`<button class="btn small" data-cons="group" data-id="${gid}">Consentements</button>`:""}</div>`}
 function grpInfoSheet(gid){const g=S.groups.get(gid);if(!g)return;const I=g.infos||{};const C=(I.contacts||[]).filter(x=>x&&(x.nom||x.tel));const L=(g.liens||[]).filter(x=>x&&x.url);
   const al=childrenOf(gid).map(([,c])=>[c.name,(c.infos||{}).allergies]).filter(([,a])=>a&&/^oui/i.test(a));
   const row=(l,v)=>v?`<p style="margin:4px 0"><span class="muted small">${l}</span><br><b>${esc(v)}</b></p>`:"";
@@ -3431,7 +3431,7 @@ render();
 if("serviceWorker" in navigator&&location.protocol==="https:")navigator.serviceWorker.register("sw.js").catch(()=>{});
 </script>
 <script>window.SYNC_CFG={"url": "https://lvwotuglgilspssufihp.supabase.co", "key": "sb_publishable_-CD7IcAGCJ9c_bwV7pIhiw_6OZXbFcB"}</script>
-<script src="supabase.js?v=carnet-sync-v18"></script>
-<script src="sync.js?v=carnet-sync-v18"></script>
+<script src="supabase.js?v=carnet-sync-v19"></script>
+<script src="sync.js?v=carnet-sync-v19"></script>
 </body>
 </html>
