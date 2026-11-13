@@ -1256,7 +1256,7 @@ function iaPending(gid,since){const g=S.groups.get(gid);if(!g)return [];const ou
 function iaCur(c,n){if(isObjOnly(c))return n.cobj&&childObjs(c).some(o=>o.id===n.cobj)?n.cobj:"cat:"+noteCat(n);return n.k||n.section||"portrait"}
 function iaDests(c){if(!c)return [];if(isObjOnly(c))return childObjs(c).map(o=>[o.id,"🎯 "+objShort(o)]).concat(NCATS.map(([k,l])=>["cat:"+k,"Autres observations · "+l]));
   const T=tpl(S.groups.get(c.groupId));return [["portrait","Portrait (général)"]].concat(T.sections.flatMap(x=>[[x.id,x.titre+" (général)"]].concat(x.rows.filter(r=>!r.free).map(r=>[x.id+"."+r.id,x.titre+" › "+r.label]))))}
-function iaCases(g){const T=tpl(g);return T.sections.flatMap(x=>x.rows.filter(r=>!r.free&&(r.steps||[]).length).map(r=>`${x.id}.${r.id} : ${(r.steps||[]).map((st,i)=>x.id+"."+r.id+"."+stK(st,i)+"="+stT(st)).join(" ; ")}`)).join("\n")}
+function iaCases(g){const T=tpl(g);return T.sections.flatMap(x=>x.rows.filter(r=>!r.free&&(r.steps||[]).length).map(r=>`${x.id}.${r.id}${r.rep?" (répertoire : coche tout ce qui est observé)":""} : ${(r.steps||[]).map((st,i)=>x.id+"."+r.id+"."+stK(st,i)+"="+stT(st)).join(" ; ")}`)).join("\n")}
 function iaPrompt(gid,chunk){const g=S.groups.get(gid);const kids=childrenOf(gid);const nm=cid=>(S.children.get(cid)||{}).name||"?";
   const obj=tpl(g).objOnly;
   const who=new Set(chunk.filter(it=>it.cid).map(it=>it.cid));kids.forEach(([k])=>who.add(k));
@@ -1266,8 +1266,8 @@ function iaPrompt(gid,chunk){const g=S.groups.get(gid);const kids=childrenOf(gid
   return `Tu aides une ergothérapeute à mettre de l'ordre dans ses notes d'observation de classe nature (groupe ${g.name}). Pour CHAQUE note étiquetée :
 1. RÉÉCRIS-LA selon les consignes de rédaction : reformule en langage clinique juste et descriptif (pas seulement l'orthographe), sans hésitations (euh, pis…) ni répétitions, sans titre au début. Garde TOUS les faits, le sens et les mots de l'enfant entre guillemets. N'ajoute rien, n'interprète pas, ne résume pas.
 2. RANGE-LA : choisis "dest" parmi les codes de l'enfant. ${obj?"Si la note a déjà un objectif (« actuel »), garde-le, sauf si un autre objectif de l'enfant correspond clairement mieux ; sinon prends la catégorie la plus juste.":"« portrait » veut dire « pas encore rangé » : choisis toujours l'occupation et le repère les plus justes (ex. une difficulté de transition va dans la transition, un jeu de construction dans le jeu, un comportement agressif dans la régulation ou les interactions). Garde « portrait » seulement pour une observation vraiment générale."}
-3. DÉCOUPE au besoin : si une note touche plusieurs domaines bien distincts, fais un extrait par domaine (chacun rangé à sa place). Si elle décrit clairement aussi un AUTRE enfant de la liste (collaboration, jeu ensemble, conflit), ajoute un extrait rédigé pour cet autre enfant (son prénom dans "enfant"), avec seulement ce qui le concerne.
-4. ${obj?"NIVEAU : si un extrait est rangé dans un objectif et montre clairement le niveau observé, indique \"niveau\" : \"ok\" (réussi), \"prog\" (en progrès) ou \"no\" (pas encore). En cas de doute, n'en mets pas.":"CASES : liste dans \"cases\" les codes des repères clairement RÉUSSIS dans l'extrait (liste CASES À COCHER). En cas de doute, n'en mets pas."}
+3. DÉCOUPE au besoin : si une note touche plusieurs domaines bien distincts, fais un extrait par domaine (chacun rangé à sa place). Si elle décrit clairement aussi un AUTRE enfant de la liste (collaboration, jeu ensemble, conflit), ajoute un extrait rédigé pour cet autre enfant (son prénom dans "enfant"), avec seulement ce qui le concerne. Dans le TEXTE d'un extrait, ne nomme jamais un autre enfant : écris « un pair » ou « des pairs » (le prénom va seulement dans "enfant").
+4. ${obj?"NIVEAU : si un extrait est rangé dans un objectif et montre clairement le niveau observé, indique \"niveau\" : \"ok\" (réussi), \"prog\" (en progrès) ou \"no\" (pas encore). En cas de doute, n'en mets pas.":"CASES : liste dans \"cases\" les codes des repères observés dans l'extrait (liste CASES À COCHER). Pour les étapes : celles clairement RÉUSSIES. Pour les listes marquées (répertoire) — schémas de jeu, types de jeu, sensoriel, obstacles — : TOUT ce qui est observé, sans juger la réussite. Plusieurs cases par extrait sont possibles et souhaitées (ex. une cabane couverte de branches attachées peut cocher enveloppement, connexion et jeu de construction). En cas de vrai doute, n'en mets pas."}
 Les notes [Q…] sont des notes rapides : trouve le ou les enfants concernés (les prénoms peuvent être mal écrits ou mal dictés : prends le bon prénom de la liste). Les notes [F…] et [X…] : réécris seulement.
 
 ENFANTS ET CODES DE RANGEMENT
@@ -1279,6 +1279,7 @@ ${chunk.map(it=>`[${lab[it.kind]}${it.n}] ${it.kind==="q"?(it.kids.length?"enfan
 Réponds seulement en JSON. Pour N et Q, une LISTE d'extraits ; le premier extrait d'une note N est pour l'enfant de la note. Ex. : {"N1":[{"enfant":"Prénom","texte":"…","dest":"code","cases":["code"]${obj?',"niveau":"ok"':""}}],"F2":{"texte":"…"},"Q3":[{"enfant":"Prénom","texte":"…","dest":"code"}]}`}
 async function iaRun(gid,opt){if(!sample){toast("L'IA n'est pas activée.");return}opt=opt||{};
   const all=iaPending(gid,opt.since);if(!all.length){toast(opt.since?"Aucune note depuis cette date.":"Tout est déjà rangé et corrigé.");return}
+  if(!opt.names){const sus=nameSuspects(gid,all.map(it=>it.text));if(sus.length){nameAsk(gid,sus,()=>iaRun(gid,Object.assign({},opt,{names:1})));return}}
   all.forEach((it,i)=>it.n=i+1);
   const chunks=[];let cur=[],len=0;all.forEach(it=>{if(cur.length>=10||len>3000){chunks.push(cur);cur=[];len=0}cur.push(it);len+=it.text.length});if(cur.length)chunks.push(cur);
   let stop=false;
@@ -1304,11 +1305,14 @@ function iaReview(gid,all,res,opt){const lab={n:"N",f:"F",x:"X",q:"Q"};const row
     const L=(Array.isArray(r)?r:[r]).filter(x=>x&&typeof x==="object"&&String(x.texte||"").trim());
     let mi=L.findIndex(x=>!x.enfant||iaKid(gid,x.enfant)===it.cid);
     const main=mi>=0?L[mi]:{texte:it.text,dest:it.dest0};const me=ext(main,it.cid);
-    const after=String(main.texte).trim();const dest=main.dest&&iaOkDest(it.cid,main.dest)?main.dest:it.dest0;
+    const after=anonOthers(String(main.texte).trim(),it.cid,gid);const dest=main.dest&&iaOkDest(it.cid,main.dest)?main.dest:it.dest0;
     const extra=L.filter((x,i)=>i!==mi);
     if(after===it.text.trim()&&dest===it.dest0&&!extra.length&&!me.cases.length&&!me.nv)auto.push(it);
     else rows.push(Object.assign({it,role:"main",cid:it.cid,after,dest},me));
     extra.forEach(x=>{const cid=iaKid(gid,x.enfant)||it.cid;const e=ext(x,cid);rows.push(Object.assign({it,role:cid===it.cid?"split":"copy",cid,after:String(x.texte).trim(),dest:String(x.dest||"")},e))})});
+  all.forEach(it=>{if(it.kind!=="n")return;const have=new Set(rows.filter(r=>r.it===it).map(r=>r.cid));have.add(it.cid);const base=(rows.find(r=>r.it===it&&r.role==="main")||{}).after||it.text;
+    kidsIn(it.text,gid).filter(k=>!have.has(k)).forEach(k=>rows.push({it,role:"copy",sugg:1,cid:k,after:base,dest:"",cases:[],nv:""}))});
+  rows.forEach(r=>{if(r.cid)r.after=anonOthers(r.after,r.cid,gid)});
   rows.forEach(r=>{if((r.role!=="main")&&r.cid&&!iaOkDest(r.cid,r.dest))r.dest=iaDests(S.children.get(r.cid))[0]?.[0]||""});
   const nm=cid=>(S.children.get(cid)||{}).name||"";
   const order=rows.map((r,i)=>i).sort((a,b)=>(nm(rows[a].cid)||"~").localeCompare(nm(rows[b].cid)||"~","fr")||String(rows[a].it.date||"").localeCompare(String(rows[b].it.date||"")));
@@ -1316,12 +1320,12 @@ function iaReview(gid,all,res,opt){const lab={n:"N",f:"F",x:"X",q:"Q"};const row
   const destSel=(i,cid,val)=>{const D=iaDests(S.children.get(cid));return D.length?`<select class="field" id="iad${i}" style="margin-top:4px;width:100%;max-width:100%">${D.map(([k,l])=>`<option value="${esc(k)}" ${k===val?"selected":""}>${esc(l)}</option>`).join("")}</select>`:""};
   const extrasHTML=(i,r)=>{const c=S.children.get(r.cid);if(!c)return "";if(isObjOnly(c))return `<span id="iavw${i}"><label class="small" style="display:block;margin-top:4px">Niveau pour l'objectif <select class="field" id="iav${i}" style="width:auto;display:inline-block;padding:4px 8px"><option value="">—</option>${[["ok","réussi"],["prog","en progrès"],["no","pas encore"]].map(([k,l])=>`<option value="${k}" ${r.nv===k?"selected":""}>${l}</option>`).join("")}</select></label></span>`;
     return r.cases.length?`<div class="small" style="margin-top:4px">${r.cases.map(k=>`<label class="chk" style="display:block"><input type="checkbox" data-iacs="${i}" value="${esc(k)}" checked> Cocher : ${esc(stepLabel(c,k))}</label>`).join("")}</div>`:""};
-  const roleTxt=r=>r.role==="split"?"✂️ morceau séparé":r.role==="copy"?`📎 tiré d'une note sur ${esc(nm(r.it.cid))}`:"";
+  const roleTxt=r=>r.role==="split"?"✂️ morceau séparé":r.role==="copy"?(r.sugg?"👥 aussi nommé dans la note : cochez pour lui ajouter":"👥 aussi pour cet enfant"):"";
   if(!rows.length){iaSave(gid,[],auto);return}
   let last=null;
   openSheet(`<h3>Relire avant d'enregistrer</h3><p class="muted small" style="margin:0">${rows.length} note${rows.length>1?"s":""} à relire${auto.length?` · ${auto.length} déjà correcte${auto.length>1?"s":""}`:""}. Décochez ce que vous ne voulez pas appliquer.</p>
   <div class="review">${order.map(i=>{const r=rows[i];const it=r.it;const head=nm(r.cid)!==last?`<h4 style="margin:12px 0 2px">${esc(nm(r.cid)||"Enfant à choisir")}</h4>`:"";last=nm(r.cid);
-    return `${head}<div class="ritem"><div class="sel"><input type="checkbox" id="iac${i}" checked> <span class="small muted">${it.date?fmtD(it.date):""}${where[it.kind]?" · "+where[it.kind]:""}${roleTxt(r)?" · "+roleTxt(r):""}</span></div>
+    return `${head}<div class="ritem"><div class="sel"><input type="checkbox" id="iac${i}" ${r.sugg?"":"checked"}> <span class="small muted">${it.date?fmtD(it.date):""}${where[it.kind]?" · "+where[it.kind]:""}${roleTxt(r)?" · "+roleTxt(r):""}</span></div>
     ${it.kind==="q"||r.role==="copy"?`<select class="field" id="iak${i}"><option value="">Choisir l'enfant…</option>${kids.map(([k,c])=>`<option value="${k}" ${k===r.cid?"selected":""}>${esc(c.name)}</option>`).join("")}</select>`:""}
     ${r.role==="main"&&r.after!==it.text.trim()?`<div class="before">${esc(it.text)}</div>`:""}<textarea class="field" id="iat${i}">${esc(r.after)}</textarea>
     <button class="btn ghost small" data-iaopen="${i}" style="margin-top:2px">✨ Reformuler autrement</button>
@@ -1349,19 +1353,20 @@ function iaSave(gid,picks,auto){const me=getMe();const X=new Map();const get=cid
   const find=(x,it)=>(it.kind==="n"?x.notes:it.kind==="x"?x.explore:(x.free||{})[it.k]||[]).find(v=>v.id===it.id);
   auto.forEach(it=>{const o=find(get(it.cid),it);if(o){o.clean=true;if(it.kind==="n")o.ranged=1}});
   const qDone=new Set();let n=0;
-  picks.forEach(({r,on,text,cid,dest,cases,nv})=>{const it=r.it;const d=it.date||todayISO();
+  picks.forEach(({r,on,text,cid,dest,cases,nv})=>{const it=r.it;const d=it.date||todayISO();text=anonOthers(text,r.role==="main"?it.cid:cid,gid);
     if(r.role==="main"){const x=get(it.cid);const o=find(x,it);if(!o)return;o.clean=true;if(it.kind==="n")o.ranged=1;if(!on||!text)return;
       if(text!==String(o.text).trim()){if(!o.raw)o.raw=o.text;o.text=text}
       if(it.kind==="n"){iaApplyDest(x,o,dest,it.dest0);iaApplyMarks(x,o.cobj||dest,cases,nv,d)}n++;return}
     if(!on||!text||!cid)return;if(it.kind==="q")qDone.add(it.id);
     const x=get(cid);const note={id:uid("n"),date:d,text,raw:it.text,clean:true,ranged:1,src:it.kind==="q"?"terrain":"ia",by:it.by||me};
-    if(r.role==="copy")note.from=(S.children.get(it.cid)||{}).name||"";
     if(isObjOnly(x)){note.obs=1;if(dest.startsWith("cat:"))note.cat=dest.slice(4);else if(dest)note.cobj=dest}
     else{note.section=(dest||"portrait").split(".")[0];if(dest.includes("."))note.k=dest}
     (x.notes=x.notes||[]).push(note);iaApplyMarks(x,dest,cases,nv,d);n++});
   X.forEach((x,cid)=>{S.children.set(cid,x);persist("children",cid)});
   if(qDone.size){const gg=JSON.parse(JSON.stringify(S.groups.get(gid)));gg.inbox=(gg.inbox||[]).filter(q=>!qDone.has(q.id));S.groups.set(gid,gg);persist("groups",gid)}
-  closeSheet();render();toast(n?`${n} note${n>1?"s":""} rangée${n>1?"s":""} et corrigée${n>1?"s":""}`:"Tout était déjà correct")}
+  closeSheet();render();toast(n?`${n} note${n>1?"s":""} rangée${n>1?"s":""} et corrigée${n>1?"s":""}`:"Tout était déjà correct");
+  if(n){const ds=picks.filter(p=>p.on).map(p=>p.r.it.date).filter(Boolean).sort();const d=ds[ds.length-1];const ks=[...X.keys()].filter(k=>(S.children.get(k).notes||[]).some(z=>z.date===d)).sort((a,b)=>S.children.get(a).name.localeCompare(S.children.get(b).name,"fr"));
+    if(d&&ks.length)openSheet(`<h3>✓ ${n} note${n>1?"s":""} rangée${n>1?"s":""}</h3><p class="muted small">Vérifiez le classement et les cases, enfant par enfant.</p><div class="row-actions"><button class="btn primary" id="rvGo">📅 Revoir la rencontre par enfant</button><button class="btn" id="rvNo">Fermer</button></div>`,s=>{s.querySelector("#rvNo").onclick=closeSheet;s.querySelector("#rvGo").onclick=()=>kidDaySheet(ks[0],d)})}}
 function iaBtn(gid,big){const n=iaPending(gid).length;return `<button class="btn ${big?"primary":"small primary"}" data-act="iaAll" data-id="${gid}" ${n?"":"disabled"}>✨ Tout ranger et corriger${n?` (${n})`:""}</button>${big?"":`<button class="btn ghost small" data-act="notesMenu" data-id="${gid}" title="Reprendre le rangement, importer des notes prises ailleurs">⋯ Notes</button>`}`}
 /* ---------- Version B : banque à cocher, photos en lot, prochaine rencontre, retour de sortie, frise ---------- */
 function bankAdd(cid,nums){const c=S.children.get(cid);if(!c)return 0;let n=0;
@@ -1391,15 +1396,19 @@ function phSort(gid,idx){const g=S.groups.get(gid);const L=(g&&g.photoInbox)||[]
     <label class="f">Note (facultatif)<textarea class="field" id="psN" style="min-height:60px" placeholder="Ce qu'on voit sur la photo…"></textarea></label>
     <div class="row-actions"><button class="btn primary" id="psOk" disabled>Ranger</button><button class="btn" id="psLater">Plus tard</button><button class="btn danger" id="psDel" style="margin-left:auto">Supprimer</button></div>
     <div class="row-actions"><button class="btn ghost small" id="psClose">Fermer</button></div>`,s=>{
-      const drawW=()=>{const K=[...sel];s.querySelector("#psOk").disabled=!K.length;s.querySelector("#psW").innerHTML=K.map(k=>{const c=S.children.get(k);const D=phDests(c);return `<label class="f">Pour ${esc(c.name)}, ranger sous…<select class="field" data-psw="${k}">${D.map(([v,l])=>`<option value="${esc(v)}">${esc(l)}</option>`).join("")}</select></label>`}).join("")+(K.length>1?`<p class="small muted" style="margin:6px 0 0">⚠️ Cette photo montre plusieurs enfants : elle sera rangée chez chacun et signalée dans les documents.</p>`:"")};
-      s.querySelectorAll("[data-psk]").forEach(b=>b.onclick=()=>{const k=b.dataset.psk;sel.has(k)?sel.delete(k):sel.add(k);b.classList.toggle("on");drawW()});
+      const drawW=()=>{const K=[...sel];s.querySelector("#psOk").disabled=!K.length;s.querySelector("#psW").innerHTML=K.map(k=>{const c=S.children.get(k);const D=phDests(c);return `<label class="f">Pour ${esc(c.name)}, ranger sous…<select class="field" data-psw="${k}">${D.map(([v,l])=>`<option value="${esc(v)}">${esc(l)}</option>`).join("")}</select></label><div data-psg="${k}"></div>`}).join("")+(K.length?"":"")+(K.length>1?`<p class="small muted" style="margin:6px 0 0">⚠️ Cette photo montre plusieurs enfants : elle sera rangée chez chacun et signalée dans les documents.</p>`:"")};
+      const sgP=()=>{const t=s.querySelector("#psN").value;[...sel].forEach(k=>{const c=S.children.get(k);const L=suggestCases(c,t);const box=s.querySelector(`[data-psg="${k}"]`);if(!box)return;const off=new Set([...box.querySelectorAll("input:not(:checked)")].map(x=>x.dataset.psc));box.innerHTML=sugHTML(L,"data-psc",new Set(L.map(x=>x.k).filter(z=>!off.has(z))));
+        const w=s.querySelector(`[data-psw="${k}"]`);if(w&&!w.dataset.touched&&L[0]&&[...w.options].some(o=>o.value===L[0].row))w.value=L[0].row})};
+      const drawW0=drawW;const drawW2=()=>{drawW0();s.querySelectorAll("[data-psw]").forEach(w=>w.onchange=()=>{w.dataset.touched=1});sgP()};
+      let ptm;s.querySelector("#psN").addEventListener("input",()=>{clearTimeout(ptm);ptm=setTimeout(sgP,250)});
+      s.querySelectorAll("[data-psk]").forEach(b=>b.onclick=()=>{const k=b.dataset.psk;sel.has(k)?sel.delete(k):sel.add(k);b.classList.toggle("on");drawW2()});
       s.querySelectorAll("[data-phs]").forEach(b=>b.onclick=()=>phSort(gid,idx+(+b.dataset.phs)));
       const box=s.querySelector(".phnav");let x0=null,y0=0;box.addEventListener("touchstart",e=>{x0=e.touches[0].clientX;y0=e.touches[0].clientY},{passive:true});
       box.addEventListener("touchend",e=>{if(x0===null)return;const dx=e.changedTouches[0].clientX-x0,dy=e.changedTouches[0].clientY-y0;x0=null;if(Math.abs(dx)>45&&Math.abs(dx)>Math.abs(dy))phSort(gid,idx+(dx<0?1:-1))});
       s.querySelector("#psLater").onclick=()=>phSort(gid,idx+1);s.querySelector("#psClose").onclick=()=>{closeSheet();render()};
       s.querySelector("#psDel").onclick=()=>confirmSheet("Supprimer cette photo pour de bon ?",async()=>{try{await assets.delete(p.id)}catch(e){}mutGroup(gid,x=>{x.photoInbox=(x.photoInbox||[]).filter(q=>q.id!==p.id)});setTimeout(()=>phSort(gid,idx),50)});
       s.querySelector("#psOk").onclick=()=>{const K=[...sel];const d=s.querySelector("#psD").value||p.d||todayISO();const note=s.querySelector("#psN").value.trim();const multi=K.length>1;
-        K.forEach(k=>{const v=s.querySelector(`[data-psw="${k}"]`).value;mutChild(k,x=>{(x.photos=x.photos||[]).push(Object.assign({id:p.id,k:v,d,at:new Date().toISOString()},multi?{multi:K.length}:{}));
+        K.forEach(k=>{const v=s.querySelector(`[data-psw="${k}"]`).value;const pk=[...s.querySelectorAll(`[data-psg="${k}"] [data-psc]:checked`)].map(x=>x.dataset.psc);mutChild(k,x=>{addChecks(x,pk,d);(x.photos=x.photos||[]).push(Object.assign({id:p.id,k:v,d,at:new Date().toISOString()},multi?{multi:K.length}:{}));
           if(note){const n={id:uid("n"),date:d,text:note,src:"photo",by:getMe(),photo:p.id};if(isObjOnly(x)){n.obs=1;if(v.startsWith("obj:"))n.cobj=v.slice(4)}else{n.section=v.split(".")[0];if(v.includes("."))n.k=v}(x.notes=x.notes||[]).push(n)}})});
         mutGroup(gid,x=>{x.photoInbox=(x.photoInbox||[]).filter(q=>q.id!==p.id)});toast("Photo rangée");setTimeout(()=>phSort(gid,idx),50)}})}
 /* Frise d'un objectif */
@@ -1518,6 +1527,212 @@ function remindersSheet(gid){const R=remindersOf(gid);openSheet(`<h3>Rappels</h3
 const LINKIMGS=["obj-nature","obj-histoire","obj-cercle","obj-partager","obj-aide","obj-mots","obj-chanter","obj-calme","obj-emotions","obj-respirer","obj-arrivee","obj-depart","obj-retour","obj-diner","obj-habiller","obj-ranger","obj-tour","obj-appel","obj-perimetre","obj-mains","obj-parole","obj-adeux"];
 function linkImgSrc(x){return x&&x.ph?x.ph:ICW((x&&x.img)||"obj-nature")}
 async function smallPhoto(f){const u=URL.createObjectURL(f);try{const im=await new Promise((r,j)=>{const i=new Image();i.onload=()=>r(i);i.onerror=j;i.src=u});const S2=240,cv=document.createElement("canvas");cv.width=S2;cv.height=S2;const s=Math.min(im.width,im.height);cv.getContext("2d").drawImage(im,(im.width-s)/2,(im.height-s)/2,s,s,0,0,S2,S2);return cv.toDataURL("image/jpeg",.82)}finally{URL.revokeObjectURL(u)}}
+/* ---------- v22 : prénoms des pairs, partage, loupe, prénoms à vérifier ---------- */
+function nameRx(n){return new RegExp("(?<![\\p{L}\\p{N}_])"+String(n).trim().replace(/[.*+?^${}()|[\]\\]/g,"\\$&").replace(/[-\s]+/g,"[-\\s]?")+"(?![\\p{L}\\p{N}_])","giu")}
+function kidsIn(text,gid){return childrenOf(gid).filter(([,c])=>kidNames(c).some(n=>n.length>1&&nameRx(n).test(text))).map(([k])=>k)}
+function anonOthers(text,cid,gid){let s=String(text||"");if(!gid)return s;const c0=S.children.get(cid);const own=new Set(c0?kidNames(c0).map(norm):[]);const names=[];
+  childrenOf(gid).forEach(([k,c])=>{if(k===cid)return;if(c.nom&&c.nom.length>2)names.push(c.name+" "+c.nom);kidNames(c).forEach(n=>{if(n.length>1&&!own.has(norm(n)))names.push(n)})});
+  if(c0)kidNames(c0).slice(1).filter(n=>n.length>2&&norm(n)!==norm(c0.name)).sort((a,b)=>b.length-a.length).forEach(n=>{s=s.replace(nameRx(n),c0.name)});
+  if(!names.length)return s;names.sort((a,b)=>b.length-a.length);const P="\u0001";
+  names.forEach(n=>{s=s.replace(nameRx(n),P)});if(!s.includes(P))return s;
+  s=s.replace(new RegExp(P+"((\\s*,\\s*"+P+")*\\s+(et|ou)\\s+"+P+")","g"),"\u0002");
+  s=s.replace(/(^|[^\p{L}])([Dd])e\s+([\u0001\u0002])/gu,(m,p,d,x)=>p+(x==="\u0002"?d+"es pairs":d+"'"+x)).replace(/(^|[^\p{L}])([Dd])['’]\u0002/gu,"$1$2es pairs");
+  s=s.replace(/(^|[^\p{L}])([Ll])['’]\u0001/gu,"$1\u0001").replace(/(^|[^\p{L}])([Àà])\s+\u0002/gu,"$1$2ux pairs");
+  s=s.replace(/(^|[.!?]\s+|\n)\u0001/g,"$1Un pair").replace(/(^|[.!?]\s+|\n)\u0002/g,"$1Des pairs");
+  return s.replace(/\u0001/g,"un pair").replace(/\u0002/g,"des pairs")}
+function noteShareSheet(cid,nid){const c=S.children.get(cid);if(!c)return;const n=(c.notes||[]).find(x=>x.id===nid);if(!n)return;const gid=c.groupId;const kids=childrenOf(gid).filter(([k])=>k!==cid);
+  const pre=kidsIn(n.text,gid).filter(k=>k!==cid);
+  openSheet(`<h3>👥 Partager la note</h3><p class="muted small" style="margin:0">Chaque enfant coché reçoit sa propre note. Les prénoms des autres enfants y deviennent « un pair » : ajustez le texte pour garder ce qui le concerne.</p>
+    <div class="before" style="margin:8px 0">${esc(n.text)}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:4px 14px">${kids.map(([k,x])=>`<label class="chk"><input type="checkbox" data-shk="${k}" ${pre.includes(k)?"checked":""}> ${esc(x.name)}</label>`).join("")}</div>
+    <div id="shT"></div>
+    <label class="chk" style="margin-top:8px"><input type="checkbox" id="shOwn" checked> Retirer aussi les prénoms des autres enfants dans la note de ${esc(c.name)}</label>
+    <div class="row-actions"><button class="btn primary" id="shOk">Enregistrer</button><button class="btn" id="shNo">Annuler</button></div>`,s=>{
+    const draw=()=>{const box=s.querySelector("#shT");const keep={};box.querySelectorAll("textarea").forEach(t=>keep[t.dataset.k]=t.value);const on=[...s.querySelectorAll("[data-shk]:checked")].map(x=>x.dataset.shk);
+      box.innerHTML=on.map(k=>`<label class="f">Pour ${esc(S.children.get(k).name)}<textarea class="field" data-k="${k}" style="min-height:70px">${esc(keep[k]!==undefined?keep[k]:anonOthers(n.text,k,gid))}</textarea></label>`).join("")};
+    draw();s.querySelectorAll("[data-shk]").forEach(x=>x.onchange=draw);s.querySelector("#shNo").onclick=closeSheet;
+    s.querySelector("#shOk").onclick=()=>{const T=[...s.querySelectorAll("#shT textarea")].filter(t=>t.value.trim());
+      T.forEach(t=>{const k=t.dataset.k;const x=JSON.parse(JSON.stringify(S.children.get(k)));const note={id:uid("n"),date:n.date,text:anonOthers(t.value.trim(),k,gid),src:"partage",by:n.by||getMe()};if(n.clean)note.clean=true;if(n.ranged)note.ranged=1;
+        if(isObjOnly(x)){note.obs=1;note.cat=noteCat(n)}else{if(n.section)note.section=n.section;if(n.k)note.k=n.k}(x.notes=x.notes||[]).push(note);S.children.set(k,x);persist("children",k)});
+      let own=false;if(s.querySelector("#shOwn").checked){const x=JSON.parse(JSON.stringify(S.children.get(cid)));const o=(x.notes||[]).find(z=>z.id===nid);if(o){const t2=anonOthers(o.text,cid,gid);if(t2!==o.text){o.text=t2;own=true;S.children.set(cid,x);persist("children",cid)}}}
+      closeSheet();render();toast(T.length?`Note ajoutée pour ${T.length} enfant${T.length>1?"s":""}`:own?"Prénoms retirés de la note":"Rien à enregistrer")}})}
+/* Prénoms mal dictés */
+function lev(a,b){const m=a.length,n=b.length;if(!m||!n)return m||n;let p=Array.from({length:n+1},(_,j)=>j);for(let i=1;i<=m;i++){const q=[i];for(let j=1;j<=n;j++)q[j]=Math.min(p[j]+1,q[j-1]+1,p[j-1]+(a[i-1]===b[j-1]?0:1));p=q}return p[n]}
+const NS_STOP=new Set("elle elles ils puis mais avec dans pour quand alors ensuite apres avant aussi tous toutes tout nous vous leur leurs cette celle celui ceux celles comme sans sous vers chez entre encore enfant enfants adulte adultes amie amis educatrice groupe foret ecole lundi mardi mercredi jeudi vendredi samedi dimanche janvier fevrier mars avril juin juillet aout septembre octobre novembre decembre jeux beaucoup petit petite grand grande bien tres plus moins merci bravo ensemble pendant depuis lorsque parce quoi quel quelle voici voila chaque plusieurs certains autres autre meme note notes elle-meme lui-meme".split(" "));
+function nameSuspects(gid,texts){const kids=childrenOf(gid);const known=new Set();kids.forEach(([,c])=>kidNames(c).forEach(n=>known.add(norm(n))));
+  try{(window.SYNC_IA?SYNC_IA.noms():[]).forEach(n=>String(n).split(/\s+/).forEach(w=>known.add(norm(w))));const me=getMe();if(me)String(me).split(/\s+/).forEach(w=>known.add(norm(w)))}catch(e){}
+  let no=[];try{no=JSON.parse(localStorage.getItem("carnet-pasnom")||"[]")}catch(e){}
+  const out=new Map();(texts.join(" \n ").match(/\p{Lu}[\p{L}’'-]{3,}/gu)||[]).forEach(w=>{w=w.replace(/^[DdLlQq]u?['’]/,"");const n=norm(w);if(n.length<4||known.has(n)||NS_STOP.has(n)||no.includes(n)||out.has(w))return;
+    let best=null,bd=99;kids.forEach(([k,c])=>{const kn=norm(c.name);if(!kn||kn[0]!==n[0])return;const d=lev(n,kn);const lim=kn.length>=8?2:1;if(d>0&&d<=lim&&d<bd){bd=d;best=k}});if(best)out.set(w,best)});
+  return [...out.entries()]}
+function nameAsk(gid,sus,next){
+  openSheet(`<h3>Prénoms à vérifier</h3><p class="muted small" style="margin:0">Ces mots ressemblent à un prénom du groupe (souvent un prénom mal dicté). Si vous répondez Oui, ils seront cachés avant l'envoi, remplacés par le bon prénom et ajoutés aux variantes de la fiche.</p>
+    ${sus.map(([w,cid],i)=>`<div style="border-top:1px dashed var(--line);padding:8px 0"><p style="margin:0 0 4px">« <b>${esc(w)}</b> », c'est ${esc((S.children.get(cid)||{}).name||"")} ?</p><label class="chk" style="display:inline-flex"><input type="radio" name="ns${i}" value="1" checked> Oui</label> <label class="chk" style="display:inline-flex;margin-left:14px"><input type="radio" name="ns${i}" value="0"> Non</label></div>`).join("")}
+    <div class="row-actions"><button class="btn primary" id="nsOk">Continuer</button><button class="btn" id="nsNo">Annuler</button></div>`,s=>{
+    s.querySelector("#nsNo").onclick=closeSheet;
+    s.querySelector("#nsOk").onclick=()=>{let no=[];try{no=JSON.parse(localStorage.getItem("carnet-pasnom")||"[]")}catch(e){}const add=new Map();
+      sus.forEach(([w,cid],i)=>{const yes=s.querySelector(`input[name="ns${i}"]:checked`).value==="1";if(yes){if(!add.has(cid))add.set(cid,[]);add.get(cid).push(w)}else no.push(norm(w))});
+      try{localStorage.setItem("carnet-pasnom",JSON.stringify(no.slice(-300)))}catch(e){}
+      add.forEach((ws,cid)=>{const x=JSON.parse(JSON.stringify(S.children.get(cid)));x.alias=[...new Set(String(x.alias||"").split(",").map(z=>z.trim()).filter(Boolean).concat(ws))].join(", ");S.children.set(cid,x);persist("children",cid)});
+      closeSheet();next()}})}
+/* Loupe */
+function searchResults(sc,id,q){const W=String(q||"").split(/\s+/).map(norm).filter(w=>w.length>=2);if(!W.length)return [];const st=W.map(w=>w.length>5?w.slice(0,-2):w);const hit=t=>{const n=norm(t);return st.every(x=>n.includes(x))};
+  const gid=sc==="g"?id:(S.children.get(id)||{}).groupId;const g=S.groups.get(gid)||{};const kids=sc==="g"?childrenOf(gid):[[id,S.children.get(id)]].filter(x=>x[1]);const R=[];const one=kids.length===1&&sc!=="g"?kids[0][0]:"";
+  const k0=kids[0]&&kids[0][1];
+  if(k0&&!isObjOnly(k0))childSections(k0).forEach(s=>(s.rows||[]).forEach(r=>{const key=s.id+"."+r.id;const where=s.titre+" › "+r.label;let any=false;
+    if(!r.free)(r.steps||[]).forEach((x,i)=>{const lbl=stT(x);if(hit(lbl)){any=true;const ck=key+"."+stK(x,i);R.push({t:"rep",cid:one,key,where,txt:lbl,who:kids.filter(([,c])=>((c.checks||{})[ck]||[]).length).map(([k])=>k)})}});
+    if(!any&&(hit(r.label)||(r.hint&&hit(r.hint))))R.push({t:"rep",cid:one,key,where:s.titre,txt:r.label,who:[]})}));
+  kids.forEach(([cid,c])=>{childObjs(c).forEach(o=>{if(hit((o.titre||"")+" "+(o.label||"")))R.push({t:"obj",cid,txt:objShort(o)})});
+    (c.notes||[]).forEach(n=>{if(hit(n.text))R.push({t:"note",cid,date:n.date,txt:n.text,key:n.k||n.section||""})});
+    Object.entries(c.free||{}).forEach(([k,L])=>(L||[]).forEach(n=>{if(hit(n.text))R.push({t:"note",cid,date:n.date,txt:n.text,key:k})}));
+    Object.entries((c.occRes||{}).res||{}).forEach(([k,r])=>{if(r&&r.t&&hit(r.t))R.push({t:"eval",cid,k,txt:String(r.t)})})});
+  (g.objectifs||[]).forEach(o=>{if(hit((o.titre||"")+" "+(o.label||"")))R.push({t:"gobj",txt:objShort(o)})});
+  const nt=R.filter(r=>r.t==="note").sort((a,b)=>String(b.date||"").localeCompare(String(a.date||"")));return R.filter(r=>r.t!=="note").concat(nt).slice(0,120)}
+function srJump(cid,key){closeSheet();let occ="";if(key){const sid=key.split(".")[0];occ=sid;if(key.includes(".")){openDetails.add("hr-"+cid+"-"+sid);try{const c=S.children.get(cid);const sec=childSections(c).find(x=>x.id===sid);const rw=sec&&sec.rows.find(x=>x.id===key.split(".")[1]);const cb=rw&&comboOf(rw);if(cb)openRows.add("s|"+cid+"|"+sid+".@"+cb.id)}catch(e){}openRows.add("s|"+cid+"|"+key);openRows.add("n|"+cid+"|"+key)}}
+  const h="#e-"+cid+(occ?"--"+occ:"");if(location.hash===h)render();else location.hash=h;
+  setTimeout(()=>{const el=key&&document.getElementById("row-"+cid+"-"+key.replace(/\./g,"-"));if(el){el.scrollIntoView({block:"center"});el.style.boxShadow="0 0 0 3px #E6B84A";setTimeout(()=>{el.style.boxShadow=""},2500)}else window.scrollTo(0,0)},400)}
+function searchSheet(sc,id){const gid=sc==="g"?id:(S.children.get(id)||{}).groupId;if(!gid)return;const nm=k=>(S.children.get(k)||{}).name||"";
+  const box="display:block;width:100%;text-align:left;border:1px solid var(--line);background:#fff;border-radius:10px;padding:8px 10px;margin:4px 0;color:inherit;font:inherit";
+  const sn=t=>{t=String(t||"");return esc(t.length>170?t.slice(0,170)+"…":t)};
+  const item=(r,i)=>{if(r.t==="rep"){if(sc==="g")return `<div style="${box}"><span class="small muted">${esc(r.where)}</span><br><b>${esc(r.txt)}</b><div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px">${childrenOf(gid).map(([k])=>`<button class="sugchip" data-srk="${i}|${k}">${r.who.includes(k)?"✓ ":""}${esc(nm(k))}</button>`).join("")}</div></div>`;
+      return `<button style="${box};cursor:pointer" data-sr="${i}"><span class="small muted">${esc(r.where)}</span><br>${r.who.length?"✓ ":""}<b>${esc(r.txt)}</b></button>`}
+    if(r.t==="gobj")return `<div style="${box}">${esc(r.txt)}</div>`;
+    const who=sc==="g"&&r.cid?`<b>${esc(nm(r.cid))}</b> · `:"";
+    if(r.t==="obj")return `<button style="${box};cursor:pointer" data-sr="${i}">${who}🎯 ${esc(r.txt)}</button>`;
+    if(r.t==="eval")return `<button style="${box};cursor:pointer" data-sr="${i}">${who}<span class="small muted">${esc((typeof occOf==="function"&&occOf(r.k)||{titre:r.k}).titre||r.k)}</span><br>${sn(r.txt)}</button>`;
+    return `<button style="${box};cursor:pointer" data-sr="${i}"><span class="small muted">${who}${r.date?fmtD(r.date):""}</span><br>${sn(r.txt)}</button>`};
+  const html=R=>{const sec=(t,l)=>{const L=R.map((r,i)=>[r,i]).filter(([r])=>r.t===t);return L.length?`<h4 style="margin:12px 0 2px">${l} (${L.length})</h4>`+L.map(([r,i])=>item(r,i)).join(""):""};
+    return sec("rep","Repères")+sec("obj","Objectifs")+sec("gobj","Objectifs du groupe")+sec("note","Notes")+sec("eval","Évaluation et PI")};
+  openSheet(`<h3>🔍 Rechercher${sc==="g"?" dans le groupe":" · "+esc(nm(id))}</h3><input class="field" id="srQ" type="search" placeholder="Ex. : enfiler, cabane, transition" autocomplete="off"><div id="srR" style="margin-top:6px"></div><div class="row-actions"><button class="btn" id="srC">Fermer</button></div>`,s=>{
+    const q=s.querySelector("#srQ"),out=s.querySelector("#srR");s.querySelector("#srC").onclick=closeSheet;
+    const draw=()=>{const R=searchResults(sc,id,q.value);out.innerHTML=!q.value.trim()?"":R.length?html(R):`<p class="muted small">Rien trouvé.</p>`;
+      out.querySelectorAll("[data-sr]").forEach(b=>b.onclick=()=>{const r=R[+b.dataset.sr];if(r.t==="eval"){closeSheet();objAllSheet(gid,"eval");return}srJump(r.cid||id,r.t==="obj"?"":r.key||"")});
+      out.querySelectorAll("[data-srk]").forEach(b=>b.onclick=()=>{const [i,k]=b.dataset.srk.split("|");srJump(k,R[+i].key)})};
+    let tm;q.oninput=()=>{clearTimeout(tm);tm=setTimeout(draw,150)};setTimeout(()=>q.focus(),60)})}
+const toHM=v=>{const m=String(v||"").match(/^\s*(\d{1,2})\s*(?:h|:|H)\s*(\d{2})?\s*$/);if(!m)return "";const h=+m[1],mi=+(m[2]||0);return h<24&&mi<60?String(h).padStart(2,"0")+":"+String(mi).padStart(2,"0"):""};
+const fmtHM=v=>{const t=toHM(v);if(!t)return String(v||"");const [h,m]=t.split(":");return (+h)+" h "+m};
+/* ---------- v23 : cases suggérées (sans IA), rencontre du jour, repasser les cases ---------- */
+const SG_STOP=new Set("avec dans pour sans sous elle elles enfant enfants adulte adultes plus tres fait faire etre avoir seul seule quand puis petit petite grand grande objet objets autre autres tout tous toute toutes comme cette leur leurs entre vers chez alors aussi encore bien bonne beaucoup moment temps fois jour pendant depuis apres avant lors lorsque parce donc ensuite plusieurs chaque quelques minutes minute aide aider".split(" "));
+const sgStem=w=>w.length>6?w.slice(0,w.length-2):w.length>5?w.slice(0,-1):w;
+const sgWords=t=>[...new Set(String(t||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").split(/[^a-z0-9]+/).filter(w=>w.length>=4&&!SG_STOP.has(w)).map(sgStem))];
+/* Retourne [{k (code de l'étape), row (sec.rid), l (libellé), sc}] triés */
+function suggestCases(c,text,onlyRow){if(!c||isObjOnly(c))return [];const W=sgWords(text);if(!W.length)return [];const out=[];
+  childSections(c).forEach(s=>(s.rows||[]).forEach(r=>{if(r.free||!(r.steps||[]).length)return;const row=s.id+"."+r.id;if(onlyRow&&row!==onlyRow)return;
+    (r.steps||[]).forEach((st,i)=>{const lbl=stT(st);const SW=sgWords(lbl);if(!SW.length)return;let sc=0;
+      SW.forEach(a=>{if(W.some(b=>{const m=Math.min(a.length,b.length);return m>=4&&a.slice(0,m)===b.slice(0,m)}))sc++});
+      if(sc)out.push({k:row+"."+stK(st,i),row,l:r.label+" : "+lbl,sc:sc+(sc/SW.length)})})}));
+  return out.sort((a,b)=>b.sc-a.sc).slice(0,onlyRow?6:5)}
+function sugHTML(L,attr,checkedSet){return L.length?`<div class="small" style="margin-top:4px"><span class="muted">Cases suggérées :</span>${L.map(x=>`<label class="chk" style="display:flex;margin:2px 0"><input type="checkbox" ${attr}="${esc(x.k)}" ${!checkedSet||checkedSet.has(x.k)?"checked":""}> <span>${esc(x.l)}</span></label>`).join("")}</div>`:""}
+function addChecks(x,keys,d){(keys||[]).forEach(k=>{x.checks=x.checks||{};const L=x.checks[k]=x.checks[k]||[];if(!L.includes(d))L.push(d)})}
+/* notes écrites dans un repère : suggestions en direct */
+document.addEventListener("input",e=>{const ta=e.target;if(!ta||!ta.id||!ta.id.startsWith("rn-"))return;const b=document.querySelector(`[data-act="addRowNote"][data-ta="${ta.id}"]`);const box=document.querySelector(`.rnsug[data-for="${ta.id}"]`);if(!b||!box)return;
+  clearTimeout(ta._sg);ta._sg=setTimeout(()=>{const c=S.children.get(b.dataset.id);const keep=new Set([...box.querySelectorAll("input:not(:checked)")].map(x=>x.dataset.rnc));
+    const L=suggestCases(c,ta.value,b.dataset.k);box.innerHTML=sugHTML(L,"data-rnc",new Set(L.map(x=>x.k).filter(k=>!keep.has(k))))},250)});
+/* Rencontre du jour */
+function dyItems(c,d){const N=(c.notes||[]).filter(n=>n.date===d).map(n=>({t:"n",n}));const F=[];Object.entries(c.free||{}).forEach(([k,L])=>(L||[]).forEach(n=>{if(n.date===d)F.push({t:"f",n,k})}));
+  return N.concat(F)}
+function dyDest(c,n){return iaCur(c,n)}
+function kidDaySheet(cid,d){const c=S.children.get(cid);if(!c)return;d=d||S.obsDate||todayISO();const g=S.groups.get(c.groupId)||{};const kids=childrenOf(c.groupId).slice().sort((a,b)=>a[1].name.localeCompare(b[1].name,"fr",{sensitivity:"base"}));
+  const ix=kids.findIndex(([k])=>k===cid);const pres=((g.presences||{})[d]||[]);const isP=pres.includes(cid);const items=dyItems(c,d);const ph=(c.photos||[]).filter(p=>p.d===d);
+  const ck=Object.entries(c.checks||{}).filter(([,L])=>(L||[]).includes(d)).map(([k])=>k);const ckS=new Set(ck);const obj=isObjOnly(c);
+  const D=iaDests(c);const destSel=(i,val)=>`<select class="field" data-dyd="${i}" style="margin-top:4px;width:100%;max-width:100%;font-size:.85rem;padding:4px 8px">${D.map(([k,l])=>`<option value="${esc(k)}" ${k===val?"selected":""}>${esc(l)}</option>`).join("")}</select>`;
+  const noteHTML=(it,i)=>{const n=it.n;if(it.t==="f")return `<div class="cdj" style="margin:6px 0"><p class="small muted" style="margin:0">Portrait</p><p style="margin:2px 0;white-space:pre-wrap">${esc(n.text)}</p></div>`;
+    const dest=dyDest(c,n);const sg=obj?[]:suggestCases(c,n.text).filter(x=>!ckS.has(x.k));
+    return `<div class="cdj" style="margin:6px 0">${n.photo?`<img src="${blobSrc(n.photo)}" data-pid="${n.photo}" alt="" style="float:right;width:54px;height:54px;object-fit:cover;border-radius:8px;margin-left:6px">`:""}<p style="margin:0;white-space:pre-wrap">${n.photo?"📷 ":""}${esc(n.text)}</p>${n.clean?"":`<span class="tag">à ranger</span>`}
+      ${destSel(i,dest)}${sg.length?`<div class="small" style="margin-top:4px"><span class="muted">À cocher ?</span> ${sg.map(x=>`<button class="sugchip" data-dyc="${esc(x.k)}">+ ${esc(x.l)}</button>`).join(" ")}</div>`:""}</div>`};
+  openSheet(`<div style="display:flex;align-items:center;gap:6px"><button class="btn small" data-dyn="-1" aria-label="Enfant précédent" ${kids.length<2?"disabled":""}>‹</button><h3 style="margin:0;flex:1;text-align:center">📅 ${esc(c.name)}</h3><button class="btn small" data-dyn="1" aria-label="Enfant suivant" ${kids.length<2?"disabled":""}>›</button></div>
+    <div style="display:flex;align-items:center;gap:8px;justify-content:center;margin:6px 0"><input type="date" class="field" id="dyD" value="${esc(d)}" style="width:auto">${(g.presences||{})[d]?`<span class="small ${isP?"":"muted"}">${isP?"présent":"absent"}</span>`:""}</div>
+    ${!items.length&&!ph.length&&!ck.length?`<p class="muted small" style="text-align:center">${isP?"⚠️ Présent, mais aucune note pour cette rencontre.":"Rien pour cette date."}</p>`:""}
+    ${items.map(noteHTML).join("")}
+    ${ph.filter(p=>!items.some(it=>it.n.photo===p.id)).length?`<div class="thumbs" style="margin:6px 0">${ph.filter(p=>!items.some(it=>it.n.photo===p.id)).map(p=>`<button class="thumb" data-dyp="${p.id}" aria-label="Voir la photo"><img src="${blobSrc(p.id)}" data-pid="${p.id}" alt=""></button>`).join("")}</div>`:""}
+    ${ck.length?`<h4 style="margin:10px 0 2px">Cases cochées ce jour</h4>${ck.map(k=>`<div class="small" style="display:flex;align-items:center;gap:6px;margin:2px 0"><span style="flex:1">✓ ${esc(stepLabel(c,k)||k)}</span><button class="btn ghost small" data-dyu="${esc(k)}" aria-label="Décocher">✕</button></div>`).join("")}`:""}
+    <details style="margin-top:10px"><summary><b>+ Ajouter ce qui manque</b></summary><textarea class="field" id="dyT" placeholder="Note pour ${esc(c.name)} (${fmtD(d)})"></textarea>${destSel("new",obj?"cat:"+((NCATS[0]||[])[0]||""):"portrait")}<div id="dySg"></div><div class="row-actions"><button class="btn primary small" id="dyAdd">Ajouter</button>${micBtn("dyT")}</div></details>
+    <div class="row-actions" style="margin-top:12px"><a class="btn ghost" href="#e-${cid}" id="dyF">Fiche</a><button class="btn" id="dyC">Fermer</button></div>`,s=>{
+    const re=()=>kidDaySheet(cid,s.querySelector("#dyD").value||d);
+    s.querySelector("#dyC").onclick=closeSheet;s.querySelector("#dyF").onclick=()=>closeSheet();s.querySelector("#dyD").onchange=re;
+    s.querySelectorAll("[data-dyn]").forEach(b=>b.onclick=()=>{const k=kids[(ix+(+b.dataset.dyn)+kids.length)%kids.length][0];kidDaySheet(k,s.querySelector("#dyD").value||d)});
+    s.querySelectorAll("[data-dyp]").forEach(b=>b.onclick=()=>photoSheet(cid,b.dataset.dyp));
+    s.querySelectorAll("[data-dyd]").forEach(sel=>{if(sel.dataset.dyd==="new")return;sel.onchange=()=>{const it=items[+sel.dataset.dyd];mutChild(cid,x=>{const o=(x.notes||[]).find(z=>z.id===it.n.id);if(!o)return;iaApplyDest(x,o,sel.value,dyDest(x,o));o.ranged=1});toast("Note reclassée");setTimeout(re,60)}});
+    s.querySelectorAll("[data-dyc]").forEach(b=>b.onclick=()=>{mutChild(cid,x=>addChecks(x,[b.dataset.dyc],d));toast("Case cochée");setTimeout(re,60)});
+    s.querySelectorAll("[data-dyu]").forEach(b=>b.onclick=()=>{mutChild(cid,x=>{const L=(x.checks||{})[b.dataset.dyu];if(L){x.checks[b.dataset.dyu]=L.filter(z=>z!==d);if(!x.checks[b.dataset.dyu].length)delete x.checks[b.dataset.dyu]}});toast("Case retirée");setTimeout(re,60)});
+    const t=s.querySelector("#dyT"),sgb=s.querySelector("#dySg");let tm;t.addEventListener("input",()=>{clearTimeout(tm);tm=setTimeout(()=>{sgb.innerHTML=sugHTML(suggestCases(c,t.value),"data-dys")},250)});
+    s.querySelector("#dyAdd").onclick=()=>{const v=t.value.trim();if(!v){t.focus();return}const dest=s.querySelector('[data-dyd="new"]').value;const keys=[...s.querySelectorAll("[data-dys]:checked")].map(x=>x.dataset.dys);
+      mutChild(cid,x=>{const o={id:uid("n"),date:d,text:v,src:"manuel",by:getMe(),ranged:1};if(isObjOnly(x)){o.obs=1;if(dest.startsWith("cat:"))o.cat=dest.slice(4);else o.cobj=dest}else{o.section=dest.split(".")[0];if(dest.includes("."))o.k=dest}(x.notes=x.notes||[]).push(o);addChecks(x,keys,d)});toast("Note ajoutée");setTimeout(re,60)}})}
+/* Repasser les cases (IA) : relit des notes déjà rangées pour proposer les cases oubliées, sans réécrire */
+async function iaCasesRun(gid,since){if(!sample){toast("L'IA n'est pas activée.");return}const g=S.groups.get(gid);const all=[];
+  childrenOf(gid).forEach(([cid,c])=>{if(isObjOnly(c))return;(c.notes||[]).forEach(n=>{if(String(n.date||"")>=since&&String(n.text||"").trim())all.push({cid,id:n.id,date:n.date,text:n.text})})});
+  if(!all.length){toast("Aucune note depuis cette date (ou groupe sans cases).");return}all.forEach((it,i)=>it.n=i+1);
+  const chunks=[];for(let i=0;i<all.length;i+=15)chunks.push(all.slice(i,i+15));let stop=false;
+  openSheet(`<h3>Repasser les cases</h3><p><span class="spinner" style="border-color:rgba(0,0,0,.2);border-top-color:var(--forest)"></span> ${all.length} note${all.length>1?"s":""} en lecture… Le texte des notes ne sera pas changé.</p><div class="row-actions"><button class="btn" id="icStop">Annuler</button></div>`,s=>{s.querySelector("#icStop").onclick=()=>{stop=true;closeSheet()}});
+  const nm=cid=>(S.children.get(cid)||{}).name||"";
+  const out=await occPool(chunks,3,ch=>sample.json(`REPASSER LES CASES. Tu aides une ergothérapeute (classe nature, groupe ${g.name}). Pour CHAQUE note ci-dessous, liste les codes des repères observés (liste plus bas). Ne réécris pas les notes.
+Pour les étapes : celles clairement RÉUSSIES. Pour les listes marquées (répertoire) — schémas de jeu, types de jeu, sensoriel, obstacles — : TOUT ce qui est observé, sans juger la réussite. Plusieurs codes par note sont possibles. En cas de vrai doute, n'en mets pas.
+
+LISTE DES REPÈRES (code=repère) :
+${iaCases(g)}
+
+NOTES
+${ch.map(it=>`[N${it.n}] ${nm(it.cid)} · ${it.date} : ${it.text}`).join("\n")}
+
+Réponds seulement en JSON, une liste de codes par note (liste vide si rien) : {"N1":["code","code"],"N2":[]}`,{modelTier:"default",max:8000}));
+  if(stop)return;const res={};out.forEach(x=>{if(x.ok&&x.v)Object.assign(res,x.v)});
+  const rows=[];all.forEach(it=>{const c=S.children.get(it.cid);const L=(Array.isArray(res["N"+it.n])?res["N"+it.n]:[]).map(String).filter(k=>iaCaseOk(it.cid,k)&&!(((c.checks||{})[k])||[]).includes(it.date));if(L.length)rows.push({it,L})});
+  if(!rows.length){closeSheet();toast(Object.keys(res).length?"Aucune case oubliée.":"La lecture n'a pas fonctionné.");return}
+  let last="";openSheet(`<h3>Cases à ajouter</h3><p class="muted small" style="margin:0">${rows.length} note${rows.length>1?"s":""}. Décochez ce qui ne s'applique pas.</p>
+    ${rows.map((r,i)=>{const h=nm(r.it.cid)!==last?`<h4 style="margin:12px 0 2px">${esc(nm(r.it.cid))}</h4>`:"";last=nm(r.it.cid);return `${h}<div class="cdj" style="margin:6px 0"><p class="small muted" style="margin:0">${fmtD(r.it.date)}</p><p style="margin:2px 0">${esc(r.it.text)}</p>${r.L.map(k=>`<label class="chk" style="display:flex"><input type="checkbox" data-icc="${i}" value="${esc(k)}" checked> <span>${esc(stepLabel(S.children.get(r.it.cid),k))}</span></label>`).join("")}</div>`}).join("")}
+    <div class="row-actions"><button class="btn primary" id="icOk">Cocher</button><button class="btn" id="icNo">Annuler</button></div>`,s=>{
+    s.querySelector("#icNo").onclick=closeSheet;
+    s.querySelector("#icOk").onclick=()=>{const by=new Map();let n=0;rows.forEach((r,i)=>{const K=[...s.querySelectorAll(`[data-icc="${i}"]:checked`)].map(x=>x.value);if(!K.length)return;n+=K.length;if(!by.has(r.it.cid))by.set(r.it.cid,[]);by.get(r.it.cid).push([K,r.it.date])});
+      by.forEach((L,cid)=>mutChild(cid,x=>L.forEach(([K,d])=>addChecks(x,K,d))));closeSheet();render();toast(`${n} case${n>1?"s":""} cochée${n>1?"s":""}`)}})}
+/* ---------- v24 : analyse avec Claude (export / import) ---------- */
+function anAdults(){const ad=new Set();try{if(getMe())ad.add(getMe())}catch(e){}try{(getSign()||[]).forEach(x=>x&&x.nom&&ad.add(x.nom))}catch(e){}
+  try{((window.SYNC&&SYNC._mem)||[]).forEach(m=>m.display_name&&ad.add(m.display_name))}catch(e){}try{(window.SYNC_IA?SYNC_IA.noms():[]).forEach(n=>n&&ad.add(n))}catch(e){}
+  return [...ad].map(x=>String(x).trim()).filter(x=>x.length>1)}
+function anMaskTable(){const T={},pairs=[];anAdults().forEach((full,i)=>{const t="Adulte_"+String.fromCharCode(65+i%26)+(i>=26?Math.floor(i/26):"");T[t]=full.split(/\s+/)[0];pairs.push([full,t]);full.split(/\s+/).filter(w=>w.length>2&&/^\p{Lu}/u.test(w)).forEach(w=>pairs.push([w,t]))});
+  pairs.sort((a,b)=>b[0].length-a[0].length);return {T,pairs}}
+function anMask(s,pairs){s=String(s||"");pairs.forEach(([w,t])=>{s=s.replace(nameRx(w),t)});return s}
+function anUnmask(s,T){return String(s||"").replace(/Adulte_[A-Z]\d*(?![A-Za-z])/g,m=>T[m]||"l'adulte")}
+function anExport(gid,since){const g=S.groups.get(gid);if(!g)return;const kids=childrenOf(gid);const {T,pairs}=anMaskTable();const id=uid("an");
+  try{localStorage.setItem("carnet-an-"+id,JSON.stringify({T,gid,at:new Date().toISOString()}))}catch(e){}
+  const k0=(kids.find(([,c])=>!isObjOnly(c))||[])[1];
+  const notes=[];kids.forEach(([cid,c])=>(c.notes||[]).forEach(n=>{if(String(n.date||"")<since||!String(n.text||"").trim())return;const H=(n.hist||[]);
+    const ck=isObjOnly(c)?[]:Object.entries(c.checks||{}).filter(([,L])=>(L||[]).includes(n.date)).map(([k])=>k);
+    const o={ref:cid+"|"+n.id,enfant:c.name,date:n.date,classement:iaCur(c,n),texte:anMask(n.text,pairs)};
+    if(H.length)o.versions_precedentes=H.map(h=>({texte:anMask(h.t,pairs),remplacee_le:String(h.at||"").slice(0,10)}));
+    o.etat=n.clean?(n.ranged?"rangée et corrigée":"corrigée"):"à ranger";if(n.src)o.source=n.src;if(n.photo)o.photo=true;if(ck.length)o.cases_du_jour=ck;notes.push(o)}));
+  notes.sort((a,b)=>String(a.date).localeCompare(String(b.date))||a.enfant.localeCompare(b.enfant,"fr"));
+  const data={format:"carnet-analyse",version:1,export:id,groupe:{id:gid,nom:g.name},exporte_le:todayISO(),depuis:since,
+    a_lire:"Analyse pour Claude. Pour chaque note : vérifier le classement, proposer les cases observées (étapes réussies ; listes « répertoire » : tout ce qui est observé ; plusieurs possibles), reformuler au besoin (observations de l'ergothérapeute écrites directement ; « l'adulte » seulement pour une intervention ; jamais le prénom d'un autre enfant dans le texte : « un pair »). Si une note concerne un autre enfant, ajouter une copie pour lui. Garder les codes Adulte_X tels quels. Réponse : un fichier JSON {format:\"carnet-analyse-reponse\",version:1,export,groupe,notes:[{ref,texte,classement,cases:[codes],niveau?,copies:[{enfant,texte,classement,cases}]}]} avec seulement les notes à changer.",
+    enfants:kids.map(([cid,c])=>Object.assign({prenom:c.name,id:cid},isObjOnly(c)?{type:"objectifs",classements:iaDests(c).map(([k,l])=>({code:k,nom:l}))}:{type:"repères"})),
+    classements_reperes:k0?iaDests(k0).map(([k,l])=>({code:k,nom:l})):[],
+    cases:k0?iaCases(g).split("\n").filter(Boolean):[],
+    notes};
+  const fn=`analyse-${String(g.name||"groupe").replace(/[^\p{L}\p{N}]+/gu,"-").toLowerCase()}-${todayISO()}.json`;const blob=new Blob([JSON.stringify(data,null,1)],{type:"application/json"});
+  (async()=>{try{if(typeof downloads!=="undefined"&&downloads)await downloads.save({filename:fn,data:blob});else{const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=fn;document.body.appendChild(a);a.click();setTimeout(()=>a.remove(),500)}
+    toast(`${notes.length} note${notes.length>1?"s":""} exportée${notes.length>1?"s":""} : envoyez le fichier à Claude`)}catch(e){toast("L'export n'a pas fonctionné.")}})();return data}
+function anImport(gid,txt){let d;try{const m=String(txt).match(/\{[\s\S]*\}/);d=JSON.parse(m?m[0]:txt)}catch(e){toast("Fichier illisible : ce n'est pas une réponse d'analyse.");return false}
+  if(!d||!/carnet-analyse-reponse/.test(d.format||"")||!Array.isArray(d.notes)){toast("Ce fichier n'est pas une réponse d'analyse de Claude.");return false}
+  if(d.groupe&&d.groupe!==gid&&(d.groupe.id||d.groupe)!==gid){const g2=S.groups.get(d.groupe.id||d.groupe);toast(g2?`Cette analyse est pour le groupe ${g2.name}.`:"Cette analyse est pour un autre groupe.");return false}
+  let T={};try{T=(JSON.parse(localStorage.getItem("carnet-an-"+d.export)||"{}").T)||{}}catch(e){}if(!Object.keys(T).length){const {T:T2}=anMaskTable();T=T2}
+  const all=[],res={};let n=0,miss=0;
+  d.notes.forEach(x=>{const [cid,nid]=String(x.ref||"").split("|");const c=S.children.get(cid);const note=c&&c.groupId===gid&&(c.notes||[]).find(z=>z.id===nid);if(!note){miss++;return}n++;
+    const it={kind:"n",cid,id:nid,date:note.date,text:note.text,dest0:iaCur(c,note),n};all.push(it);
+    const main={enfant:c.name,texte:anUnmask(x.texte!=null&&String(x.texte).trim()?x.texte:note.text,T),dest:x.classement||iaCur(c,note),cases:Array.isArray(x.cases)?x.cases:[]};if(x.niveau)main.niveau=x.niveau;
+    res["N"+n]=[main].concat((Array.isArray(x.copies)?x.copies:[]).map(y=>{const kc=S.children.get(y.enfant)?y.enfant:(iaKid(gid,y.enfant)||"");const kn=(S.children.get(kc)||{}).name||y.enfant;return {enfant:kn,texte:anUnmask(y.texte,T),dest:y.classement||"",cases:Array.isArray(y.cases)?y.cases:[]}}))});
+  if(!all.length){toast(miss?"Aucune de ces notes n'existe sur cet appareil.":"L'analyse ne propose aucun changement.");return false}
+  iaReview(gid,all,res,{src:"claude"});if(miss)setTimeout(()=>toast(`${miss} note${miss>1?"s":""} introuvable${miss>1?"s":""} (supprimée${miss>1?"s":""} depuis l'export ?)`),800);return true}
+function anSheet(gid){const g=S.groups.get(gid);
+  openSheet(`<h3>Analyse avec Claude</h3><p class="muted small" style="margin:0">Sans crédits du carnet : vous envoyez vos notes à Claude dans l'appli Claude, puis vous importez sa réponse. Rien n'est changé avant votre relecture.</p>
+    <h4 style="margin:12px 0 4px">1. Exporter les notes · ${esc(g.name)}</h4>
+    <div class="row-actions" style="align-items:center"><label class="small">Depuis le <input type="date" class="field" id="anS" value="${new Date(Date.now()-30*864e5).toISOString().slice(0,10)}" style="width:auto;display:inline-block"></label><button class="btn small primary" id="anX">Exporter</button></div>
+    <p class="muted small" style="margin:2px 0">Prénoms des enfants gardés ; noms de famille et dates de naissance jamais exportés ; noms des adultes remplacés par des codes.</p>
+    <h4 style="margin:12px 0 4px">2. Importer l'analyse de Claude</h4>
+    <div class="row-actions"><label class="btn small">📄 Choisir le fichier<input type="file" accept=".json,.txt,application/json,text/plain" hidden id="anF"></label></div>
+    <details><summary class="small">ou coller la réponse</summary><textarea class="field" id="anP" placeholder="Collez ici la réponse de Claude" style="min-height:90px"></textarea><button class="btn small" id="anPI">Importer</button></details>
+    <div class="row-actions"><button class="btn" id="anC">Fermer</button></div>`,s=>{
+    s.querySelector("#anC").onclick=closeSheet;s.querySelector("#anX").onclick=()=>anExport(gid,s.querySelector("#anS").value||"2000-01-01");
+    const f=s.querySelector("#anF");f.onchange=async()=>{if(!f.files[0])return;const t=await f.files[0].text();anImport(gid,t)};
+    s.querySelector("#anPI").onclick=()=>{const t=s.querySelector("#anP").value.trim();if(t)anImport(gid,t)}})}
 /* ---------- Activités proposées ---------- */
 function actBank(g){const m=new Map();Object.values(g.activites||{}).forEach(L=>(L||[]).forEach(a=>{const k=norm(a.text);const o=m.get(k)||{text:a.text,occ:a.occ,n:0};o.n++;if(!o.occ&&a.occ)o.occ=a.occ;m.set(k,o)}));return [...m.values()].sort((a,b)=>b.n-a.n)}
 function actBlock(gid,d){const g=S.groups.get(gid);const L=(g.activites||{})[d]||[];const fut=d>todayISO();const bank=actBank(g).filter(b=>!L.some(a=>norm(a.text)===norm(b.text))).slice(0,12);
@@ -1942,21 +2157,22 @@ function homeLinksSheet(){const L=homeLinksGet().concat([{}]);
       s.querySelector("#hlOk").onclick=async()=>{const liens=[...s.querySelectorAll(".hl")].map(r=>{const i=r.querySelectorAll("input.field");const o={t:i[0].value.trim(),url:i[1].value.trim()};if(r._ph)o.ph=r._ph;else if(r.dataset.img)o.img=r.dataset.img;return o}).filter(x=>x.url);
         try{localStorage.setItem("carnet-liens",JSON.stringify(liens))}catch(e){}if(window.CARNET_LOCAL&&db)await db.doc("config/liens").set({liens});closeSheet();render();toast("Liens enregistrés")}})}
 function grpBar(gid,g){const L=(g.liens||[]).filter(x=>x&&x.url);
-  return `<div class="row-actions" style="margin-top:10px"><button class="btn small" data-act="gInfo" data-id="${gid}">ℹ️ Infos du groupe</button><button class="btn small" data-act="prep" data-id="${gid}">📋 Prochaine rencontre</button>${sample?`<button class="btn small" data-act="retour" data-id="${gid}">✨ Retour de sortie</button>`:""}${(()=>{const n=remindersOf(gid).length;return n?`<button class="btn ghost small" data-act="gRem" data-id="${gid}" title="Rappels" style="opacity:.75">🔔 ${n}</button>`:""})()}${L.map(x=>`<a class="btn small" href="${esc(/^https?:\/\//.test(x.url)?x.url:"https://"+x.url)}" target="_blank" rel="noopener" style="text-decoration:none">🔗 ${esc(x.t||"Lien")}</a>`).join("")}${window.CONS?`<button class="btn small" data-cons="group" data-id="${gid}">Consentements</button>`:""}</div>`}
+  return `<div class="row-actions" style="margin-top:10px"><button class="btn small" data-act="search" data-sc="g" data-id="${gid}">🔍 Rechercher</button><button class="btn small" data-act="gInfo" data-id="${gid}">ℹ️ Infos du groupe</button><button class="btn small" data-act="prep" data-id="${gid}">📋 Prochaine rencontre</button>${sample?`<button class="btn small" data-act="retour" data-id="${gid}">✨ Retour de sortie</button>`:""}${L.map(x=>`<a class="btn small" href="${esc(/^https?:\/\//.test(x.url)?x.url:"https://"+x.url)}" target="_blank" rel="noopener" style="text-decoration:none">🔗 ${esc(x.t||"Lien")}</a>`).join("")}${window.CONS?`<button class="btn small" data-cons="group" data-id="${gid}">Consentements</button>`:""}</div>`}
 function grpInfoSheet(gid){const g=S.groups.get(gid);if(!g)return;const I=g.infos||{};const C=(I.contacts||[]).filter(x=>x&&(x.nom||x.tel));const L=(g.liens||[]).filter(x=>x&&x.url);
   const al=childrenOf(gid).map(([,c])=>[c.name,(c.infos||{}).allergies]).filter(([,a])=>a&&/^oui/i.test(a));
   const row=(l,v)=>v?`<p style="margin:4px 0"><span class="muted small">${l}</span><br><b>${esc(v)}</b></p>`:"";
   openSheet(`<h3>ℹ️ Infos du groupe</h3><p class="muted small" style="margin:0 0 6px">${esc(g.name)}</p>
-    ${row("Sièges d'appoint (boosters)",I.boosters)}${row("Heure de départ",I.depart)}${row("Heure d'arrivée",I.arrivee)}${row("Lieu de rendez-vous",I.rdv)}
+    ${row("Sièges d'appoint (boosters)",I.boosters)}${I.depart||I.departF||I.arrivee?`<p style="margin:6px 0;font-size:1.05rem">${[I.depart&&"École <b>"+esc(fmtHM(I.depart))+"</b>",I.departF&&"Forêt <b>"+esc(fmtHM(I.departF))+"</b>",I.arrivee&&"École <b>"+esc(fmtHM(I.arrivee))+"</b>"].filter(Boolean).join(" → ")}</p><p class="muted small" style="margin:0 0 6px">Départ de l'école → départ de la forêt → arrivée à l'école</p>`:""}${row("Lieu de rendez-vous",I.rdv)}
     ${I.autres?`<p style="margin:8px 0;white-space:pre-wrap">${esc(I.autres)}</p>`:""}
     ${C.length?`<h4 style="margin:12px 0 4px">Personnes à contacter</h4>${C.map(x=>`<div style="display:flex;align-items:center;gap:8px;margin:4px 0"><span style="flex:1"><b>${esc(x.nom)}</b>${x.role?` <span class="muted small">· ${esc(x.role)}</span>`:""}</span>${x.tel?`<a class="btn small" style="text-decoration:none" href="tel:${esc(String(x.tel).replace(/[^\d+]/g,""))}">📞 ${esc(x.tel)}</a>`:""}</div>`).join("")}`:""}
     ${al.length?`<h4 style="margin:12px 0 4px">Allergies (consentements)</h4>${al.map(([n,a])=>`<p class="small" style="margin:2px 0"><b>${esc(n)}</b> : ${esc(String(a).replace(/^oui\s*:?\s*/i,""))}</p>`).join("")}`:""}
     ${L.length?`<h4 style="margin:12px 0 4px">Liens utiles</h4><div class="row-actions">${L.map(x=>`<a class="btn small" href="${esc(/^https?:\/\//.test(x.url)?x.url:"https://"+x.url)}" target="_blank" rel="noopener" style="text-decoration:none">🔗 ${esc(x.t||x.url)}</a>`).join("")}</div>`:""}
-    ${!I.boosters&&!I.depart&&!I.arrivee&&!I.rdv&&!I.autres&&!C.length&&!L.length?`<p class="muted small">Rien encore. Ajoutez les infos dans « Modifier le groupe ».</p>`:""}
+    ${!I.boosters&&!I.depart&&!I.departF&&!I.arrivee&&!I.rdv&&!I.autres&&!C.length&&!L.length?`<p class="muted small">Rien encore. Ajoutez les infos dans « Modifier le groupe ».</p>`:""}
     <div class="row-actions" style="margin-top:12px"><button class="btn" id="giEd">Modifier</button><button class="btn" id="giClose">Fermer</button></div>`,s=>{s.querySelector("#giClose").onclick=closeSheet;s.querySelector("#giEd").onclick=()=>groupSheet(gid,"infos")})}
 function grpInfoForm(g){const I=g.infos||{};const C=(I.contacts||[]).concat([{}]);const L=(g.liens||[]).concat([{}]);
   return `<details class="ogdet" id="gInfoDet" style="margin-top:10px"><summary><b>Infos du groupe et liens utiles</b></summary>
-    <div class="row"><label class="f" style="flex:1">Sièges d'appoint<input class="field" id="giB" value="${esc(I.boosters||"")}" inputmode="numeric"></label><label class="f" style="flex:1">Départ<input class="field" id="giD" value="${esc(I.depart||"")}" placeholder="8 h 30"></label><label class="f" style="flex:1">Arrivée<input class="field" id="giA" value="${esc(I.arrivee||"")}" placeholder="11 h 45"></label></div>
+    <label class="f">Sièges d'appoint<input class="field" id="giB" value="${esc(I.boosters||"")}" inputmode="numeric" style="max-width:140px"></label>
+    <div class="row" style="flex-wrap:wrap">${[["giD","Départ de l'école",I.depart],["giF","Départ de la forêt",I.departF],["giA","Arrivée à l'école",I.arrivee]].map(([k,l,v])=>`<label class="f" style="flex:1 1 120px">${l}<input class="field" id="${k}" ${!v||toHM(v)?`type="time" value="${toHM(v)}"`:`value="${esc(v)}"`}></label>`).join("")}</div>
     <label class="f">Lieu de rendez-vous<input class="field" id="giR" value="${esc(I.rdv||"")}"></label>
     <label class="f">Autres infos<textarea class="field" id="giO" style="min-height:60px">${esc(I.autres||"")}</textarea></label>
     <p class="label" style="margin:10px 0 2px">Personnes à contacter</p><div id="giC">${C.map(x=>`<div class="row gic" style="gap:6px;margin:4px 0"><input class="field" placeholder="Nom" value="${esc(x.nom||"")}"><input class="field" placeholder="Rôle" value="${esc(x.role||"")}"><input class="field" placeholder="Téléphone" inputmode="tel" value="${esc(x.tel||"")}"></div>`).join("")}</div><button type="button" class="btn ghost small" id="giCAdd">+ Une personne</button>
@@ -1964,7 +2180,7 @@ function grpInfoForm(g){const I=g.infos||{};const C=(I.contacts||[]).concat([{}]
 function grpInfoBind(s){const a=s.querySelector("#giCAdd");if(!a)return;a.onclick=()=>s.querySelector("#giC").insertAdjacentHTML("beforeend",`<div class="row gic" style="gap:6px;margin:4px 0"><input class="field" placeholder="Nom"><input class="field" placeholder="Rôle"><input class="field" placeholder="Téléphone" inputmode="tel"></div>`);
   s.querySelector("#giLAdd").onclick=()=>s.querySelector("#giL").insertAdjacentHTML("beforeend",`<div class="row gil" style="gap:6px;margin:4px 0"><input class="field" placeholder="Titre"><input class="field" placeholder="Adresse (https://…)" inputmode="url"></div>`)}
 function grpInfoRead(s,obj){if(!s.querySelector("#giB"))return;const v=id=>s.querySelector(id).value.trim();
-  obj.infos={boosters:v("#giB"),depart:v("#giD"),arrivee:v("#giA"),rdv:v("#giR"),autres:v("#giO"),contacts:[...s.querySelectorAll(".gic")].map(r=>{const i=r.querySelectorAll("input");return {nom:i[0].value.trim(),role:i[1].value.trim(),tel:i[2].value.trim()}}).filter(x=>x.nom||x.tel)};
+  obj.infos={boosters:v("#giB"),depart:v("#giD"),departF:v("#giF"),arrivee:v("#giA"),rdv:v("#giR"),autres:v("#giO"),contacts:[...s.querySelectorAll(".gic")].map(r=>{const i=r.querySelectorAll("input");return {nom:i[0].value.trim(),role:i[1].value.trim(),tel:i[2].value.trim()}}).filter(x=>x.nom||x.tel)};
   obj.liens=[...s.querySelectorAll(".gil")].map(r=>{const i=r.querySelectorAll("input");return {t:i[0].value.trim(),url:i[1].value.trim()}}).filter(x=>x.url)}
 function inboxHTML(gid){const g=S.groups.get(gid);const L=(g&&g.inbox||[]).slice().sort((a,b)=>(a.at||"").localeCompare(b.at||""));
   if(!L.length)return sample&&iaPending(gid).length?`<section class="card inbox"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="small">Des notes ne sont pas encore rangées ou corrigées.</span>${iaBtn(gid)}</div></section>`:"";
@@ -2150,7 +2366,7 @@ function viewChild(cid,secId){ensureRepaired(cid);
   const g=S.groups.get(c.groupId)||{name:"Groupe"};const T={nom:tpl(g).nom,sections:childSections(c)};
   crumbs([`<a href="#g-${c.groupId}">${esc(g.name)}</a>`,secId?`<a href="#e-${cid}">${esc(c.name)}</a>`:`<span>${esc(c.name)}</span>`].concat(secId?[`<span>${esc(secId==="portrait"?"Portrait":secId==="synthese"?"Synthèse":(occOf(secId)||{titre:secId}).titre)}</span>`]:[]));
   let h="";{const sib=childrenOf(c.groupId).slice().sort((x,y)=>x[1].name.localeCompare(y[1].name,"fr",{sensitivity:"base"}));if(sib.length>1)h+=`<nav class="kidsw" aria-label="Enfants du groupe">${sib.map(([id,k])=>`<a href="#e-${id}${secId?"--"+secId:""}" class="${id===cid?"on":""}" title="${esc(k.name)}"><img src="${img("avatar-"+(k.avatar||"renard"))}" alt=""><span>${esc(k.name)}</span></a>`).join("")}</nav>`}
-  h+=`<section class="card chead"><img class="av" src="${avSrc(c)}"${avAt(c)} alt=""><div class="who"><h2>${starH(c)}${esc(c.name)}<button class="ico gear" data-act="editChild" data-id="${cid}" title="Réglages de l'enfant" aria-label="Réglages de l'enfant">${GEAR}</button></h2><div class="muted small">${esc(g.name)}${c.dob?" · "+esc(ageAt(c.dob,S.obsDate)):""}${c.langues?" · "+esc(c.langues):""}</div></div>
+  h+=`<section class="card chead"><img class="av" src="${avSrc(c)}"${avAt(c)} alt=""><div class="who"><h2>${starH(c)}${esc(c.name)}<button class="ico gear" data-act="editChild" data-id="${cid}" title="Réglages de l'enfant" aria-label="Réglages de l'enfant">${GEAR}</button><button class="ico" data-act="search" data-sc="e" data-id="${cid}" title="Rechercher dans la fiche" aria-label="Rechercher dans la fiche" style="font-size:1rem">🔍</button><button class="ico" data-act="day" data-id="${cid}" title="Rencontre du jour" aria-label="Rencontre du jour" style="font-size:1rem">📅</button></h2><div class="muted small">${esc(g.name)}${c.dob?" · "+esc(ageAt(c.dob,S.obsDate)):""}${c.langues?" · "+esc(c.langues):""}</div></div>
   ${(()=>{const pd=presDates(g);if(!pd.length)return "";const n=pd.filter(d=>g.presences[d].includes(cid)).length;const last=pd.slice(-12);
     return `<div class="cpres"><span class="label">Présences</span> <b>${n} / ${pd.length}</b> rencontre${pd.length>1?"s":""}${n<pd.length?` · absent${n<pd.length-1?"":""} : ${pd.filter(d=>!g.presences[d].includes(cid)).slice(-4).map(d=>fmtD(d)).join(", ")}`:""}<div class="pdots">${last.map(d=>{const on=g.presences[d].includes(cid);return `<span class="${on?"on":""}" title="${fmtD(d,true)} : ${on?"présent":"absent"}">${parseISO(d).getDate()}</span>`}).join("")}</div></div>`})()}
   <div class="toolbar"><label class="obsdate small"><span class="label">Date d'observation</span><input type="date" id="obsDate" value="${S.obsDate}" data-act="obsDate"></label></div></section>`;
@@ -2305,7 +2521,7 @@ function matchKid(n,map,strict){const x=norm(n);if(!x)return "";if(map.has(x))re
   if(best&&!tie)return best;
   if(!strict&&first.length>=3){const pre=[...map].filter(([k])=>k.startsWith(first)||first.startsWith(k));const ids=[...new Set(pre.map(p=>p[1]))];if(ids.length===1)return ids[0]}
   return ""}
-function kidNames(c){return [c.name].concat(String(c.alias||"").split(",")).map(x=>x.trim()).filter(Boolean)}
+function kidNames(c){const L=[c.name].concat(String(c.alias||"").split(",")).map(x=>x.trim()).filter(Boolean);L.slice().forEach(n=>{if(/-/.test(n)){L.push(n.replace(/-/g," "));L.push(n.replace(/-/g,""))}});return [...new Set(L)]}
 function carnetSpec(g,kids){const T=tpl(g);
   const kl=kids.map(([,c])=>{const al=kidNames(c).slice(1);return `- ${c.name}${al.length?" (aussi écrit : "+al.join(", ")+")":""}`}).join("\n");
   const sl=T.sections.map(x=>`${x.id} = ${(occOf(x.id)||{}).titre||x.titre}${(occOf(x.id)||{subs:[1]}).subs.length>1?" / "+x.titre:""}\n`+x.rows.map(r=>r.free?`  ${x.id}.${r.id} = ${r.label} (note libre)`:`  ${x.id}.${r.id} = ${r.label} : `+r.steps.map((st,i)=>`[${x.id}.${r.id}.${stK(st,i)}] ${stT(st)}`).join(" ; ")).join("\n")).join("\n")+"\nportrait = qui il est (intérêts, ce qui le calme, ce qui est difficile, ce que dit la famille)";
@@ -2544,22 +2760,23 @@ function tidySpeech(t){t=" "+t+" ";
   t=dedupeWords(t.replace(/\n/g," ⏎ ")).replace(/ ?⏎ ?/g,"\n").replace(/\s+([,.])/g,"$1").replace(/[ \t]+/g," ").trim();
   t=t.replace(/(^|[.!?]\s+|\n)([a-zà-ÿ])/g,(m,a,b)=>a+b.toUpperCase());if(t&&!/[.!?…]$/.test(t))t+=".";return t}
 function dictate(taId,btn){const ta=document.getElementById(taId);if(!ta)return;
-  if(recog){try{recog.stop()}catch(e){}return}
-  try{recog=new SR();recog.lang="fr-CA";recog.interimResults=true;recog.continuous=true;const base=ta.value?ta.value.replace(/\s*$/," "):"";let said="";
-    const low=x=>x.toLowerCase().replace(/[^\p{L}\p{N} ]/gu,"").replace(/\s+/g," ").trim();
-    recog.onresult=ev=>{const fin=[];let tmp="";
-      for(let i=0;i<ev.results.length;i++){const t=String(ev.results[i][0].transcript||"").trim();if(!t)continue;
-        if(ev.results[i].isFinal){const last=fin[fin.length-1];
-          if(last!==undefined&&low(t).startsWith(low(last)))fin[fin.length-1]=t; /* Android : le résultat répète le précédent */
-          else if(last!==undefined&&low(last).startsWith(low(t))){}
-          else if(fin.length&&low(fin.join(" ")).endsWith(low(t))){}
-          else fin.push(t)}
-        else tmp=t}
-      const f=fin.join(" ");if(tmp&&f&&low(tmp).startsWith(low(f)))tmp=tmp.slice(f.length).trim();
-      said=f;ta.value=base+f+(tmp?" "+tmp:"")};
-    recog.onerror=ev=>{if(ev.error==="no-speech"||ev.error==="aborted")return;toast(ev.error==="not-allowed"||ev.error==="service-not-allowed"?"Le micro n'est pas permis ici : utilisez le micro du clavier de votre téléphone.":"La dictée s'est arrêtée.")};
-    recog.onend=()=>{recog=null;btn.classList.remove("on");btn.innerHTML=MIC+" Dicter";if(said){ta.value=base+tidySpeech(said);ta.dispatchEvent(new Event("input",{bubbles:true}))}};
-    recog.start();btn.classList.add("on");btn.innerHTML=MIC+" Arrêter";ta.focus()}
+  if(recog){recog._stop=true;try{recog.stop()}catch(e){}return}
+  const T=()=>document.getElementById(taId)||ta;const B=()=>document.querySelector(`[data-act="dictate"][data-ta="${taId}"]`)||btn;const base=ta.value?ta.value.replace(/\s*$/," "):"";let done="";const t0=Date.now();
+  const low=x=>x.toLowerCase().replace(/[^\p{L}\p{N} ]/gu,"").replace(/\s+/g," ").trim();
+  const merge=(L,t)=>{const last=L[L.length-1];if(last!==undefined&&low(t).startsWith(low(last)))L[L.length-1]=t; /* Android : le résultat répète le précédent */
+    else if(last!==undefined&&low(last).startsWith(low(t))){}else if(L.length&&low(L.join(" ")).endsWith(low(t))){}else L.push(t)};
+  const finish=()=>{recog=null;const b=B();b.classList.remove("on");b.innerHTML=MIC+" Dicter";if(done){const x=T();x.value=base+tidySpeech(done);x.dispatchEvent(new Event("input",{bubbles:true}))}};
+  const start=()=>{const r=new SR();r.lang="fr-CA";r.interimResults=true;r.continuous=true;recog=r;let sess="";
+    r.onresult=ev=>{const fin=[],tmp=[];
+      for(let i=0;i<ev.results.length;i++){const t=String(ev.results[i][0].transcript||"").trim();if(!t)continue;merge(ev.results[i].isFinal?fin:tmp,t)}
+      const f=fin.join(" ");let t=tmp.join(" ");if(t&&f&&low(t).startsWith(low(f)))t=t.slice(f.length).trim();
+      sess=f;const pre=done?done+" ":"";T().value=base+pre+f+(t?(f?" ":"")+t:"")};
+    r.onerror=ev=>{if(ev.error==="no-speech"||ev.error==="aborted")return;r._stop=true;toast(ev.error==="not-allowed"||ev.error==="service-not-allowed"?"Le micro n'est pas permis ici : utilisez le micro du clavier de votre téléphone.":"La dictée s'est arrêtée.")};
+    r.onend=()=>{if(sess)done=(done?done+" ":"")+sess;sess="";
+      if(!r._stop&&recog===r&&Date.now()-t0<20*60e3&&document.getElementById(taId)){try{start();return}catch(e){}}  /* reprend seule après un silence */
+      finish()};
+    r.start()};
+  try{start();btn.classList.add("on");btn.innerHTML=MIC+" Arrêter";ta.focus()}
   catch(e){recog=null;toast("Utilisez le micro du clavier de votre téléphone pour dicter.")}}
 const openNotes=new Set();
 function rowNotes(cid,c,key,noPh){
@@ -2567,8 +2784,8 @@ function rowNotes(cid,c,key,noPh){
   const nOpen=openRows.has("n|"+nk)||list.length<=1;
   const head=list.length>1?`<button class="ntog" data-act="toggleRow" data-k="n|${nk}"><span class="car">${nOpen?"▾":"▸"}</span> ${list.length} notes${nOpen?"":` · ${fmtD(list[0].date)} : <span class="nprev">${esc(list[0].text)}</span>`}</button>`:"";
   const rph=noPh?[]:photosOf(c,p=>p.k===key||String(p.k).startsWith(key+".")).sort((a,b)=>(b.d||"").localeCompare(a.d||""));
-  return `<div class="rnotes">${rph.length?`<div class="rphotos"><span class="label">Photos (${rph.length})</span>${thumbs(c,rph,cid)}</div>`:""}${head}${(nOpen?list:[]).map(n=>`<div class="entry"><span class="when">${fmtD(n.date)}</span><span class="txt">${esc(n.text)}${n.from?'<span class="tag">tiré d\'une note sur '+esc(n.from)+'</span>':""}${(n.hist||[]).length?`<button class="tag" data-act="noteHist" data-id="${cid}" data-n="${n.id}" style="cursor:pointer;border:0">modifiée</button>`:""}${n.src==="groupe"?'<span class="tag">notes collées</span>':n.src==="terrain"&&!n.ranged?'<span class="tag">terrain · à ranger</span>':""}${byTag(n)}</span><button class="x" aria-label="Supprimer" data-act="delNote" data-id="${cid}" data-n="${n.id}">✕</button></div>`).join("")}
-  ${open?`<div class="addnote"><textarea class="field" id="${taId}" data-keep="[data-ta=${taId}][data-act=addRowNote]" placeholder="Note sur ce repère (${fmtD(S.obsDate)})"></textarea><div class="row-actions"><button class="btn primary" data-act="addRowNote" data-id="${cid}" data-k="${key}" data-ta="${taId}">Ajouter</button>${micBtn(taId)}<button class="btn ghost" data-act="toggleNote" data-k="${nk}">Fermer</button></div></div>`:""}</div>`;
+  return `<div class="rnotes">${rph.length?`<div class="rphotos"><span class="label">Photos (${rph.length})</span>${thumbs(c,rph,cid)}</div>`:""}${head}${(nOpen?list:[]).map(n=>`<div class="entry"><span class="when">${fmtD(n.date)}</span><span class="txt">${esc(n.text)}<button class="tag" data-act="noteShare" data-id="${cid}" data-n="${n.id}" style="cursor:pointer;border:0" title="Partager avec d'autres enfants" aria-label="Partager avec d'autres enfants">👥</button>${(n.hist||[]).length?`<button class="tag" data-act="noteHist" data-id="${cid}" data-n="${n.id}" style="cursor:pointer;border:0">modifiée</button>`:""}${n.src==="groupe"?'<span class="tag">notes collées</span>':n.src==="terrain"&&!n.ranged?'<span class="tag">terrain · à ranger</span>':""}${byTag(n)}</span><button class="x" aria-label="Supprimer" data-act="delNote" data-id="${cid}" data-n="${n.id}">✕</button></div>`).join("")}
+  ${open?`<div class="addnote"><textarea class="field" id="${taId}" data-keep="[data-ta=${taId}][data-act=addRowNote]" placeholder="Note sur ce repère (${fmtD(S.obsDate)})"></textarea><div class="rnsug" data-for="${taId}"></div><div class="row-actions"><button class="btn primary" data-act="addRowNote" data-id="${cid}" data-k="${key}" data-ta="${taId}">Ajouter</button>${micBtn(taId)}<button class="btn ghost" data-act="toggleNote" data-k="${nk}">Fermer</button></div></div>`:""}</div>`;
 }
 function notesHTML(cid,c,secIds,title,ph){const ids=Array.isArray(secIds)?secIds:[secIds];const secId=ids[0];
   const phs=photosOf(c,p=>ids.includes(p.k)).sort((a,b)=>(b.d||"").localeCompare(a.d||""));const nRepPh=photosOf(c,p=>ids.some(x=>String(p.k).startsWith(x+"."))).length;
@@ -2577,7 +2794,7 @@ function notesHTML(cid,c,secIds,title,ph){const ids=Array.isArray(secIds)?secIds
   const selK=cid+"|"+secId,sel=S.selN===selK;
   return `<section class="card" data-nsec="${selK}"><div class="ordhead"><h3 style="font-size:1.3rem;margin-bottom:8px">${esc(title)}</h3>${list.length>1?`<button class="btn ghost small" data-act="selN" data-k="${selK}">${sel?"Annuler":"Sélectionner"}</button>`:""}</div>${sel?`<div class="hidebar" style="position:static"><span>Cochez les notes à supprimer.</span><button class="btn danger small" data-act="delSelN" data-id="${cid}" data-k="${selK}">Supprimer la sélection</button></div>`:""}${nRep?`<p class="muted small" style="margin:0 0 8px">${nRep} note${nRep>1?"s":""} rangée${nRep>1?"s":""} sous leur repère, plus haut.</p>`:""}${photoBlock}
   <div class="addnote"><textarea class="field" id="note-${secId}" data-keep="[data-act=addNote][data-s=${secId}]" placeholder="${esc(ph)}"></textarea><div class="row-actions"><button class="btn primary" data-act="addNote" data-id="${cid}" data-s="${secId}">Ajouter la note (${fmtD(S.obsDate)})</button>${micBtn("note-"+secId)}</div></div>
-  <div class="entries" style="margin-top:10px">${list.map(n=>`<div class="entry">${sel?`<input type="checkbox" class="nsel" value="${n.id}" aria-label="Choisir cette note">`:""}<span class="when">${fmtD(n.date)}</span><span class="txt">${n.k?`<b class="small">${esc(stepLabel(c,n.k))}</b> · `:""}${esc(n.text)}${n.from?'<span class="tag">tiré d\'une note sur '+esc(n.from)+'</span>':""}${(n.hist||[]).length?`<button class="tag" data-act="noteHist" data-id="${cid}" data-n="${n.id}" style="cursor:pointer;border:0">modifiée</button>`:""}${n.src==="groupe"?'<span class="tag">notes collées</span>':n.src==="terrain"&&!n.ranged?'<span class="tag">terrain · à ranger</span>':""}${byTag(n)}</span><button class="x" aria-label="Supprimer" data-act="delNote" data-id="${cid}" data-n="${n.id}">✕</button></div>`).join("")||'<p class="muted small">Aucune note dans cette section.</p>'}</div></section>`;
+  <div class="entries" style="margin-top:10px">${list.map(n=>`<div class="entry">${sel?`<input type="checkbox" class="nsel" value="${n.id}" aria-label="Choisir cette note">`:""}<span class="when">${fmtD(n.date)}</span><span class="txt">${n.k?`<b class="small">${esc(stepLabel(c,n.k))}</b> · `:""}${esc(n.text)}<button class="tag" data-act="noteShare" data-id="${cid}" data-n="${n.id}" style="cursor:pointer;border:0" title="Partager avec d'autres enfants" aria-label="Partager avec d'autres enfants">👥</button>${(n.hist||[]).length?`<button class="tag" data-act="noteHist" data-id="${cid}" data-n="${n.id}" style="cursor:pointer;border:0">modifiée</button>`:""}${n.src==="groupe"?'<span class="tag">notes collées</span>':n.src==="terrain"&&!n.ranged?'<span class="tag">terrain · à ranger</span>':""}${byTag(n)}</span><button class="x" aria-label="Supprimer" data-act="delNote" data-id="${cid}" data-n="${n.id}">✕</button></div>`).join("")||'<p class="muted small">Aucune note dans cette section.</p>'}</div></section>`;
 }
 
 function viewPortrait(cid,c){
@@ -2652,19 +2869,23 @@ function eclairGroupSheet(gid){const kids=childrenOf(gid).slice().sort((x,y)=>x[
 function notesMenu(gid){const g=S.groups.get(gid);const d=S.obsDate;
   if(sample){const n=iaPending(gid).length;openSheet(`<h3>Notes</h3><p class="small" style="margin:0 0 10px">${n?`<b>${n} note${n>1?"s":""}</b> pas encore rangée${n>1?"s":""} ou corrigée${n>1?"s":""}, toutes dates confondues : notes rapides, notes du terrain, notes des fiches et observations.`:"Toutes les notes sont rangées et corrigées."}</p>
     <div class="row-actions">${iaBtn(gid,true)}<button class="btn" id="nmC">Fermer</button></div>
+    <div style="margin-top:12px;border-top:1px dashed var(--line);padding-top:8px"><button class="btn" id="nmAn2">🤝 Analyse avec Claude</button> <span class="muted small">exporter les notes, les analyser dans l'appli Claude, importer sa réponse (sans crédits du carnet)</span></div>
     <div style="margin-top:12px;border-top:1px dashed var(--line);padding-top:8px"><p class="small" style="margin:0 0 6px"><b>Notes prises ailleurs</b> <span class="muted">(papier, autre appli) : classez-les avec votre propre IA, sans crédits du carnet.</span></p>
       <div class="row-actions"><button class="btn small" id="nmIA2">Instructions IA</button><button class="btn small" id="nmImp2">Importer la réponse de l'IA</button></div></div>
     <details style="margin-top:12px"><summary class="small"><b>Reprendre le rangement</b> de notes déjà traitées</summary><p class="small muted" style="margin:4px 0">Repasse les notes des fiches avec les règles actuelles (découpage, copie chez les autres enfants, cases). Rien n'est enregistré avant votre relecture.</p>
-      <div class="row-actions" style="align-items:center"><label class="small">Depuis le <input type="date" class="field" id="nmSince" value="${new Date(Date.now()-30*864e5).toISOString().slice(0,10)}" style="width:auto;display:inline-block"></label><button class="btn small" id="nmRedo">✨ Reprendre</button></div></details>`,s=>{s.querySelector("#nmC").onclick=closeSheet;s.querySelector("#nmIA2").onclick=()=>copyText(instrText(gid),"Instructions copiées : collez-les dans votre IA");s.querySelector("#nmImp2").onclick=()=>pasteSheet(gid,S.obsDate||todayISO(),{replace:true});s.querySelector("#nmRedo").onclick=()=>iaRun(gid,{since:s.querySelector("#nmSince").value||"2000-01-01"})});return}
+      <div class="row-actions" style="align-items:center"><label class="small">Depuis le <input type="date" class="field" id="nmSince" value="${new Date(Date.now()-30*864e5).toISOString().slice(0,10)}" style="width:auto;display:inline-block"></label><button class="btn small" id="nmRedo">✨ Reprendre</button></div></details>
+    <details style="margin-top:8px"><summary class="small"><b>Repasser les cases</b> des notes déjà rangées</summary><p class="small muted" style="margin:4px 0">Relit les notes seulement pour proposer les cases oubliées (schémas, types de jeu…). Le texte des notes ne change pas. Vous choisissez avant que ce soit coché.</p>
+      <div class="row-actions" style="align-items:center"><label class="small">Depuis le <input type="date" class="field" id="nmCs" value="${new Date(Date.now()-30*864e5).toISOString().slice(0,10)}" style="width:auto;display:inline-block"></label><button class="btn small" id="nmCsGo">✨ Repasser les cases</button></div></details>`,s=>{s.querySelector("#nmAn2").onclick=()=>anSheet(gid);s.querySelector("#nmCsGo").onclick=()=>iaCasesRun(gid,s.querySelector("#nmCs").value||"2000-01-01");s.querySelector("#nmC").onclick=closeSheet;s.querySelector("#nmIA2").onclick=()=>copyText(instrText(gid),"Instructions copiées : collez-les dans votre IA");s.querySelector("#nmImp2").onclick=()=>pasteSheet(gid,S.obsDate||todayISO(),{replace:true});s.querySelector("#nmRedo").onclick=()=>iaRun(gid,{since:s.querySelector("#nmSince").value||"2000-01-01"})});return}
   openSheet(`<h3>Notes</h3><label class="f">Date<input type="date" class="field" id="nmD" value="${d}"></label>
   <div class="nmenu">
    <button class="nmi" id="nmExp"><b>Exporter mes notes du jour</b><span></span></button>
    <button class="nmi" id="nmImp"><b>Importer la réponse de l'IA</b><span></span></button>
    <button class="nmi" id="nmIA"><b>Instructions IA</b><span></span></button>
+   <button class="nmi" id="nmAn"><b>🤝 Analyse avec Claude</b><span>Exporter mes notes, importer sa réponse</span></button>
    <button class="nmi" id="nmRg"><b>Ranger les notes du terrain</b><span></span></button>
    ${sample?`<button class="nmi" id="nmMp"><b>Mettre au propre avec Claude</b><span>Toutes les notes de cette date, réécrites proprement (avant / après)</span></button>`:""}
   </div><button class="btn" id="nmC">Fermer</button>`,s=>{
-    s.querySelector("#nmIA").onclick=()=>copyText(instrText(gid),"Instructions copiées : collez-les dans votre IA");
+    s.querySelector("#nmAn").onclick=()=>anSheet(gid);s.querySelector("#nmIA").onclick=()=>copyText(instrText(gid),"Instructions copiées : collez-les dans votre IA");
     const dd=()=>s.querySelector("#nmD").value||todayISO();
     s.querySelector("#nmD").onchange=()=>{S.obsDate=dd();notesMenu(gid)};
     s.querySelector("#nmC").onclick=closeSheet;s.querySelector("#nmImp").onclick=()=>pasteSheet(gid,dd(),{replace:true});
@@ -2812,6 +3033,7 @@ document.addEventListener("click",e=>{
   else if(a==="iaAll")iaRun(id);
   else if(a==="gInfo")grpInfoSheet(id);
   else if(a==="homeLinks")homeLinksSheet();
+  else if(a==="search")searchSheet(b.dataset.sc,id);else if(a==="day")kidDaySheet(id,S.obsDate);else if(a==="noteShare")noteShareSheet(id,b.dataset.n);
   else if(a==="noteHist")noteHistSheet(id,b.dataset.n);else if(a==="trash")trashSheet(id);else if(a==="gOver")groupOverview(id);else if(a==="gRem")remindersSheet(id);
   else if(a==="gObjHide"){mutGroup(id,x=>{x.hideGObj=true});toast("Retiré. Pour le remettre : Modifier le groupe.")}
   else if(a==="scEdit")scSheet(id);
@@ -2842,7 +3064,7 @@ document.addEventListener("click",e=>{
   else if(a==="schAll"){S.schAll=!S.schAll;if(!S.schAll)[...openRows].forEach(x=>{if(x.startsWith("s|"))openRows.delete(x)});render()}
   else if(a==="noteDictate"){openNotes.add(k);render();const [cid2,key2]=k.split("|");const tid="rn-"+cid2+"-"+key2.replace(/\./g,"-");setTimeout(()=>{const bt=document.querySelector(`[data-act=dictate][data-ta="${tid}"]`);if(bt)dictate(tid,bt)},0)}
   else if(a==="toggleNote"){openNotes.has(k)?openNotes.delete(k):openNotes.add(k);render();if(openNotes.has(k)){const [cid2,key2]=k.split("|");setTimeout(()=>document.getElementById("rn-"+cid2+"-"+key2.replace(/\./g,"-"))?.focus(),0)}}
-  else if(a==="addRowNote"){const ta=document.getElementById(b.dataset.ta);const t=ta.value.trim();if(!t){ta.focus();return}ta.value="";openNotes.delete(id+"|"+k);mutChild(id,x=>{(x.notes=x.notes||[]).push({id:uid("n"),section:k.split(".")[0],k,date:S.obsDate,text:t,src:"manuel",by:getMe()})});toast("Note ajoutée")}
+  else if(a==="addRowNote"){const ta=document.getElementById(b.dataset.ta);const t=ta.value.trim();if(!t){ta.focus();return}ta.value="";openNotes.delete(id+"|"+k);const rk=[...document.querySelectorAll(`.rnsug[data-for="${b.dataset.ta}"] [data-rnc]:checked`)].map(x=>x.dataset.rnc);mutChild(id,x=>{(x.notes=x.notes||[]).push({id:uid("n"),section:k.split(".")[0],k,date:S.obsDate,text:t,src:"manuel",by:getMe()});addChecks(x,rk,S.obsDate)});toast(rk.length?`Note ajoutée · ${rk.length} case${rk.length>1?"s":""} cochée${rk.length>1?"s":""}`:"Note ajoutée")}
   else if(a==="dictate"){dictate(b.dataset.ta,b)}
   else if(a==="toggleRow"){openRows.has(k)?openRows.delete(k):openRows.add(k);render()}
   else if(a==="exportChild")exportSheet(id);
@@ -2975,13 +3197,21 @@ function photoSheet(cid,pid){const c=S.children.get(cid);const p=(c.photos||[]).
   const cx=ctxOf(c.groupId,p.d);const lab=stepLabel(c,p.k)||secTitle(tpl(S.groups.get(c.groupId)),p.k.split(".")[0]);
   openSheet(`<div class="phnav" style="position:relative;touch-action:pan-y"><img class="bigphoto" id="phImg" src="${blobSrc(p.id)}" data-pid="${p.id}" alt="" draggable="false">${PL.length>1?`<button class="phbtn" data-phn="-1" aria-label="Photo précédente" style="position:absolute;left:4px;top:50%;transform:translateY(-50%);width:40px;height:40px;border-radius:50%;border:0;background:rgba(255,255,255,.85);font-size:1.4rem">‹</button><button class="phbtn" data-phn="1" aria-label="Photo suivante" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);width:40px;height:40px;border-radius:50%;border:0;background:rgba(255,255,255,.85);font-size:1.4rem">›</button><span class="small" style="position:absolute;right:8px;bottom:8px;background:rgba(0,0,0,.55);color:#fff;border-radius:999px;padding:1px 8px">${pi+1} / ${PL.length}</span>`:""}</div><div><b>${esc(c.name)}</b> · ${fmtD(p.d,true)}${cx?" · "+esc(cx):""}</div><div class="muted small">${esc(lab)}</div>
   <label class="f">Ranger sous…<select class="field" id="phK"><option value="portrait">Portrait (photos du terrain)</option>${OCCS.map(o=>`<optgroup label="${esc(o.titre)}">${occSecs(c,o).flatMap(sec=>sec.rows.filter(r=>!r.free).map(r=>`<option value="${sec.id}.${r.id}" ${String(p.k).startsWith(sec.id+"."+r.id)?"selected":""}>${esc(r.label)}</option>`)).join("")}</optgroup>`).join("")}</select></label>
-  <div class="row-actions"><button class="btn primary" id="phMove">Ranger</button><button class="btn" id="phClose">Fermer</button>${assets?`<button class="btn danger" id="phDel" style="margin-left:auto">Supprimer</button>`:""}</div>`,s=>{
+  ${(()=>{const n0=(c.notes||[]).find(n=>n.photo===pid);return `<label class="f">Ce qu'on voit <span class="muted small">(devient une note de ${esc(c.name)})</span><textarea class="field" id="phN" style="min-height:60px" placeholder="Ex. : enfile des feuilles sur un bâton pendant 10 minutes">${esc(n0?n0.text:"")}</textarea></label><div id="phSg"></div>`})()}
+  <div class="row-actions"><button class="btn primary" id="phMove">Enregistrer</button><button class="btn" id="phClose">Fermer</button>${assets?`<button class="btn danger" id="phDel" style="margin-left:auto">Supprimer</button>`:""}</div>`,s=>{
     const go=dlt=>{if(PL.length<2)return;const q=PL[(pi+dlt+PL.length)%PL.length];photoSheet(cid,q.id)};
     s.querySelectorAll("[data-phn]").forEach(b=>b.onclick=()=>go(+b.dataset.phn));
     const box=s.querySelector(".phnav");let x0=null,y0=0;box.addEventListener("touchstart",e=>{x0=e.touches[0].clientX;y0=e.touches[0].clientY},{passive:true});
     box.addEventListener("touchend",e=>{if(x0===null)return;const dx=e.changedTouches[0].clientX-x0,dy=e.changedTouches[0].clientY-y0;x0=null;if(Math.abs(dx)>45&&Math.abs(dx)>Math.abs(dy))go(dx<0?1:-1)});
     const kh=e=>{if(!document.body.contains(box)){document.removeEventListener("keydown",kh);return}if(e.key==="ArrowRight")go(1);else if(e.key==="ArrowLeft")go(-1)};document.addEventListener("keydown",kh);
-    s.querySelector("#phClose").onclick=closeSheet;s.querySelector("#phMove").onclick=()=>{const v=s.querySelector("#phK").value;mutChild(cid,x=>{const q=(x.photos||[]).find(z=>z.id===pid);if(q)q.k=v});closeSheet();toast("Photo rangée")};const del=s.querySelector("#phDel");if(del)del.onclick=()=>delPhoto(cid,pid)})}
+    s.querySelector("#phClose").onclick=closeSheet;
+    const pN=s.querySelector("#phN"),pSg=s.querySelector("#phSg"),pK=s.querySelector("#phK");let pkT=false;pK.addEventListener("change",()=>{pkT=true});let ptm2;
+    const sgO=()=>{const L=suggestCases(c,pN.value).filter(x=>!(((c.checks||{})[x.k])||[]).includes(p.d));const off=new Set([...pSg.querySelectorAll("input:not(:checked)")].map(x=>x.dataset.phc));pSg.innerHTML=sugHTML(L,"data-phc",new Set(L.map(x=>x.k).filter(z=>!off.has(z))));if(!pkT&&L[0]&&[...pK.options].some(o=>o.value===L[0].row))pK.value=L[0].row};
+    pN.addEventListener("input",()=>{clearTimeout(ptm2);ptm2=setTimeout(sgO,250)});
+    s.querySelector("#phMove").onclick=()=>{const v=pK.value;const t=pN.value.trim();const keys=[...pSg.querySelectorAll("[data-phc]:checked")].map(x=>x.dataset.phc);
+      mutChild(cid,x=>{const q=(x.photos||[]).find(z=>z.id===pid);if(q)q.k=v;const d=(q&&q.d)||p.d||todayISO();addChecks(x,keys,d);let n=(x.notes||[]).find(z=>z.photo===pid);
+        if(t){if(!n){n={id:uid("n"),date:d,src:"photo",by:getMe(),photo:pid};(x.notes=x.notes||[]).push(n)}if(n.text!==t){n.text=t;delete n.clean;delete n.ranged}if(isObjOnly(x)){n.obs=1}else{n.section=v.split(".")[0];if(v.includes("."))n.k=v;else delete n.k}}});
+      closeSheet();toast(keys.length?`Photo enregistrée · ${keys.length} case${keys.length>1?"s":""} cochée${keys.length>1?"s":""}`:"Photo enregistrée")};const del=s.querySelector("#phDel");if(del)del.onclick=()=>delPhoto(cid,pid)})}
 function stepSheet(cid,k,label){
   const draw=()=>{const c=S.children.get(cid);const ok=((c.checks||{})[k]||[]),ny=((c.notyet||{})[k]||[]);
     const ent=ok.map(d=>({d,s:"ok"})).concat(ny.map(d=>({d,s:"ny"}))).sort((a,b)=>b.d.localeCompare(a.d));
@@ -3480,7 +3710,7 @@ render();
 if("serviceWorker" in navigator&&location.protocol==="https:")navigator.serviceWorker.register("sw.js").catch(()=>{});
 </script>
 <script>window.SYNC_CFG={"url": "https://lvwotuglgilspssufihp.supabase.co", "key": "sb_publishable_-CD7IcAGCJ9c_bwV7pIhiw_6OZXbFcB"}</script>
-<script src="supabase.js?v=carnet-sync-v21"></script>
-<script src="sync.js?v=carnet-sync-v21"></script>
+<script src="supabase.js?v=carnet-sync-v24"></script>
+<script src="sync.js?v=carnet-sync-v24"></script>
 </body>
 </html>
