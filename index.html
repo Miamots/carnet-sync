@@ -1798,6 +1798,53 @@ function meetingSheet(sc,id,mid){const gid=sc==="g"?id:(S.children.get(id)||{}).
       if(sc==="g"){const K=[...s.querySelectorAll("[data-mtk]:checked")].map(x=>x.dataset.mtk);if(!K.length){toast("Cochez au moins un enfant.");return}
         K.forEach(k=>mutChild(k,x=>{(x.meetings=x.meetings||[]).push(Object.assign({id:uid("m"),text:anonOthers(text,k,gid),by:getMe(),at:new Date().toISOString(),grp:1},JSON.parse(JSON.stringify(base)),{suivis:base.suivis.map(z=>Object.assign({},z,{id:uid("s")}))}))}));closeSheet();render();toast(`Réunion ajoutée pour ${K.length} enfant${K.length>1?"s":""}`);return}
       mutChild(id,x=>{const L=x.meetings=x.meetings||[];const o=mid?L.find(z=>z.id===mid):null;const t2=anonOthers(text,id,gid);if(o)Object.assign(o,base,{text:t2,maj:new Date().toISOString()});else L.push(Object.assign({id:uid("m"),text:t2,by:getMe(),at:new Date().toISOString()},base))});closeSheet();render();toast("Réunion enregistrée")}})}
+/* ---------- v26 : importer des consentements Google Forms (CSV) ---------- */
+function csvParse(t){t=String(t||"").replace(/^\uFEFF/,"");const R=[];let row=[],f="",q=false;
+  for(let i=0;i<t.length;i++){const ch=t[i];if(q){if(ch==='"'){if(t[i+1]==='"'){f+='"';i++}else q=false}else f+=ch}
+    else if(ch==='"')q=true;else if(ch===","){row.push(f);f=""}else if(ch==="\n"||ch==="\r"){if(ch==="\r"&&t[i+1]==="\n")i++;row.push(f);f="";if(row.some(x=>x.trim()))R.push(row);row=[]}else f+=ch}
+  row.push(f);if(row.some(x=>x.trim()))R.push(row);return R}
+const csvDate=v=>{v=String(v||"").trim();let m=v.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);if(m)return `${m[1]}-${m[2].padStart(2,"0")}-${m[3].padStart(2,"0")}`;m=v.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);if(m)return `${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`;return ""};
+function csvKidMatch(gid,name){const n=norm(name);if(!n)return "";const toks=String(name).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").split(/[^a-z]+/).filter(w=>w.length>1);let best="",bs=99;
+  childrenOf(gid).forEach(([k,c])=>{const full=norm((c.name||"")+" "+(c.nom||""));const first=norm(c.name||"");const cands=[full,first].concat(kidNames(c).map(norm));let sc=99;
+    cands.forEach(x=>{if(!x)return;if(x===n)sc=Math.min(sc,0);else{const d=lev(x,n);if(d<=Math.max(2,Math.floor(n.length/6)))sc=Math.min(sc,d)}});
+    if(sc>2&&first&&toks.length&&norm(toks[0])===first){const rest=toks.slice(1).join("");const nomN=norm(c.nom||"");sc=Math.min(sc,!nomN||!rest?2.5:nomN&&(rest.includes(nomN)||nomN.includes(rest)||lev(rest,nomN)<=2)?1:2.8)}
+    if(sc<bs){bs=sc;best=k}else if(sc===bs&&sc<99)best=best+"|"+k});
+  return bs<=2.8&&!best.includes("|")?best:""}
+function consCsvSheet(gid){const g=S.groups.get(gid);if(!g)return;const y=new Date().getFullYear()+(new Date().getMonth()>=7?1:0);
+  openSheet(`<h3>📥 Importer des consentements · ${esc(g.name)}</h3><p class="muted small" style="margin:0">Fichier CSV des réponses Google Forms (Réponses › Télécharger). Ajoutez les PDF si vous en avez : ils sont joints à l'enfant dont le nom est dans le nom du fichier.</p>
+    <label class="btn" style="margin:10px 0 4px">📄 Choisir le CSV<input type="file" id="ccF" accept=".csv,text/csv,.txt" hidden></label> <span class="small muted" id="ccFn"></span><br>
+    ${assets?`<label class="btn small" style="margin:4px 0">📎 PDF (facultatif)<input type="file" id="ccP" accept="application/pdf,image/*" multiple hidden></label> <span class="small muted" id="ccPn"></span>`:""}
+    <label class="f">Valide jusqu'au<input type="date" class="field" id="ccU" value="${y}-08-31" style="max-width:180px"></label>
+    <div id="ccR"></div><div class="row-actions"><button class="btn primary" id="ccOk" disabled>Ranger dans les fiches</button><button class="btn" id="ccNo">Annuler</button></div>`,s=>{
+    let rows=[],pdfs=[];s.querySelector("#ccNo").onclick=closeSheet;
+    const pp=s.querySelector("#ccP");if(pp)pp.onchange=()=>{pdfs=[...pp.files];s.querySelector("#ccPn").textContent=pdfs.length?pdfs.length+" fichier(s)":"";draw()};
+    const pdfFor=nm=>{const t=String(nm).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").split(/[^a-z]+/).filter(w=>w.length>1);return pdfs.filter(f=>{const fn=norm(f.name);return t.length&&t.every(w=>fn.includes(w))})};
+    const draw=()=>{const box=s.querySelector("#ccR");if(!rows.length){box.innerHTML="";return}const kids=childrenOf(gid);
+      box.innerHTML=`<p class="small" style="margin:8px 0 4px"><b>${rows.length} réponse${rows.length>1?"s":""}</b>. Vérifiez l'enfant associé à chaque réponse.</p>`+rows.map((r,i)=>{const no=r.ans.filter(a=>!a.v);const has=r.cid&&(CONS.list(S.children.get(r.cid))||[]).some(z=>z.src==="gforms"&&z.signedAt&&z.signedAt.slice(0,10)===r.date);const pf=pdfFor(r.nom);
+        return `<div style="border-top:1px dashed var(--line);padding:6px 0"><div class="small"><b>${esc(r.nom)}</b>${r.dob?` · ${esc(r.dob)}`:""} · <span class="muted">${esc(r.date)}</span> · ${no.length?`<span style="color:#A33">${no.length} refus</span>`:`${r.ans.length} oui sur ${r.ans.length}`}${pf.length?` · 📎 ${pf.length}`:""}${has?` · <span class="muted">déjà importé</span>`:""}</div>
+          <select class="field" data-ccr="${i}" style="font-size:.9rem;padding:4px 8px;margin-top:2px"><option value="">— Ne pas importer —</option><option value="new" ${!r.cid?"":""}>+ Créer une fiche « ${esc(r.nom)} »</option>${kids.map(([k,c])=>`<option value="${k}" ${k===r.cid&&!has?"selected":""}>${esc(c.name)}${c.nom?" "+esc(c.nom):""}</option>`).join("")}</select>
+          ${no.length?`<div class="small" style="color:#A33">Refus : ${no.map(a=>esc(a.t)).join(" ; ")}</div>`:""}</div>`}).join("");
+      s.querySelector("#ccOk").disabled=false};
+    s.querySelector("#ccF").onchange=async e=>{const f=e.target.files[0];if(!f)return;s.querySelector("#ccFn").textContent=f.name;const R=csvParse(await f.text());if(R.length<2){toast("Ce CSV ne contient aucune réponse.");return}
+      const H=R[0].map(h=>String(h).replace(/\s+/g," ").trim());const col=re=>H.findIndex(h=>re.test(h));
+      const cN=col(/^nom de l.enfant/i),cD=col(/naissance/i),cT=col(/^horodatage|^timestamp/i),cA=col(/allergie/i),cP=col(/^nom des parents/i);
+      if(cN<0){toast("Colonne « Nom de l'enfant » introuvable.");return}
+      const yn=H.map((h,j)=>j).filter(j=>j!==cN&&j!==cD&&j!==cT&&j!==cA&&j!==cP&&R.slice(1).every(r=>/^\s*(oui|non)\b/i.test(r[j]||"")));
+      const lab=h=>h.length>110?h.slice(0,107)+"…":h;
+      rows=R.slice(1).map(r=>{const nom=String(r[cN]||"").trim();const dob=cD>=0?csvDate(r[cD]):"";const date=(cT>=0&&csvDate(r[cT]))||todayISO();
+        return {nom,dob,date,allerg:cA>=0?String(r[cA]||"").trim():"",parents:cP>=0?String(r[cP]||"").trim():"",ans:yn.map(j=>({t:lab(H[j]),v:/^\s*oui/i.test(r[j]||"")})),cid:csvKidMatch(gid,nom)}}).filter(r=>r.nom);
+      draw()};
+    s.querySelector("#ccOk").onclick=async()=>{const b=s.querySelector("#ccOk");const until=s.querySelector("#ccU").value||"";const todo=rows.map((r,i)=>[r,s.querySelector(`[data-ccr="${i}"]`).value]).filter(([,v])=>v);
+      if(!todo.length){toast("Aucune réponse à importer.");return}b.disabled=true;b.textContent="Classement…";let n=0,nf=0;
+      for(const [r,v] of todo){let cid=v;
+        if(v==="new"){cid=uid("c");const toks=r.nom.split(/\s+/);const first=toks[0]?toks[0][0].toUpperCase()+toks[0].slice(1):r.nom;S.children.set(cid,{groupId:gid,name:first,nom:toks.slice(1).join(" "),avatar:AVATARS[(childrenOf(gid).length)%AVATARS.length],dob:r.dob||"",checks:{},sout:{},free:{},notes:[],synth:{},facil:{},next:[],createdAt:todayISO()});persist("children",cid);nf++}
+        const files=[];if(assets)for(const f of pdfFor(r.nom)){try{const up=await assets.upload(f,{type:f.type||"application/pdf"});files.push({id:up.id,mime:f.type||"application/pdf",name:f.name})}catch(e){console.warn(e)}}
+        const no=r.ans.filter(a=>!a.v);
+        mutChild(cid,x=>{(x.consents=x.consents||[]).push({id:"cp"+Math.random().toString(36).slice(2,9),type:"papier",src:"gforms",status:"signe",signedAt:r.date+"T12:00:00",addedAt:new Date().toISOString(),by:getMe(),until,
+            note:`Formulaire Google${r.parents?" · rempli par "+r.parents:""} · ${no.length?no.length+" refus":"oui à tout ("+r.ans.length+")"}${r.allerg&&!/^\s*n(on|o|i)\b/i.test(r.allerg)?" · Allergies : "+r.allerg:""}`,answers:r.ans,files});
+          if(!x.dob&&r.dob)x.dob=r.dob;
+          const toks=r.nom.split(/\s+/);if(!x.nom&&toks.length>1&&norm(toks[0])===norm(x.name))x.nom=toks.slice(1).join(" ")});n++}
+      closeSheet();render();toast(`${n} consentement${n>1?"s":""} rangé${n>1?"s":""}${nf?` · ${nf} fiche${nf>1?"s":""} créée${nf>1?"s":""}`:""}`)}})}
 /* ---------- Activités proposées ---------- */
 function actBank(g){const m=new Map();Object.values(g.activites||{}).forEach(L=>(L||[]).forEach(a=>{const k=norm(a.text);const o=m.get(k)||{text:a.text,occ:a.occ,n:0};o.n++;if(!o.occ&&a.occ)o.occ=a.occ;m.set(k,o)}));return [...m.values()].sort((a,b)=>b.n-a.n)}
 function actBlock(gid,d){const g=S.groups.get(gid);const L=(g.activites||{})[d]||[];const fut=d>todayISO();const bank=actBank(g).filter(b=>!L.some(a=>norm(a.text)===norm(b.text))).slice(0,12);
@@ -3780,7 +3827,7 @@ render();
 if("serviceWorker" in navigator&&location.protocol==="https:")navigator.serviceWorker.register("sw.js").catch(()=>{});
 </script>
 <script>window.SYNC_CFG={"url": "https://lvwotuglgilspssufihp.supabase.co", "key": "sb_publishable_-CD7IcAGCJ9c_bwV7pIhiw_6OZXbFcB"}</script>
-<script src="supabase.js?v=carnet-sync-v25"></script>
-<script src="sync.js?v=carnet-sync-v25"></script>
+<script src="supabase.js?v=carnet-sync-v26"></script>
+<script src="sync.js?v=carnet-sync-v26"></script>
 </body>
 </html>

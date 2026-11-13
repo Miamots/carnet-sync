@@ -328,7 +328,7 @@ const CONS=window.CONS={DESC_DEF:"Le projet a pour but de stimuler les habileté
   list(c){return (c&&c.consents||[]).slice().sort((a,b)=>String(b.sentAt).localeCompare(String(a.sentAt)))},
   url(t,k){return location.origin+location.pathname.replace(/[^/]*$/,"")+"consentement.html#t="+t+"&k="+k},
   fd(iso){return iso?new Date(iso).toLocaleDateString("fr-CA",{day:"numeric",month:"long",year:"numeric"}):""},
-  echeance(r){if(!r||!r.signedAt)return null;const d=new Date(r.signedAt);d.setDate(d.getDate()+365);return d},
+  echeance(r){if(!r||!r.signedAt)return null;if(r.until&&/^\d{4}-\d{2}-\d{2}$/.test(r.until))return new Date(r.until+"T12:00:00");const d=new Date(r.signedAt);d.setDate(d.getDate()+365);return d},
   card(cid){const c=S.children.get(cid);if(!c)return "";const L=CONS.list(c);const sg=L.find(r=>r.status==="signe");const pd=L.find(r=>r.status==="envoye"&&new Date(r.sentAt).getTime()+30*864e5>Date.now());
     const ech=CONS.echeance(sg);const soon=ech&&ech.getTime()-Date.now()<30*864e5;
     const st=sg?`✅ Signé${sg.type==="papier"?" (papier)":""} le ${CONS.fd(sg.signedAt)}${sg.type==="papier"?"":" par "+esc(((sg.data||{}).parents||[]).map(p=>p.nom).join(" et "))}${soon?` · <b style="color:#B5523B">partage de renseignements : échéance le ${CONS.fd(ech)}</b>`:""}${pd?` · nouveau lien envoyé le ${CONS.fd(pd.sentAt)}`:""}`
@@ -355,11 +355,11 @@ const CONS=window.CONS={DESC_DEF:"Le projet a pour but de stimuler les habileté
     const rows=kids.map(([cid,c])=>{const L=CONS.list(c);const sg=L.find(r=>r.status==="signe");const pd=L.find(r=>r.status==="envoye");return {cid,c,sg,pd}});
     const ids=rows.flatMap(r=>r.sg&&r.sg.files?r.sg.files.filter(f=>/^image\//.test(f.mime)).map(f=>f.id):[]);await CONS.preload(ids);
     const pdfs=rows.flatMap(r=>r.sg&&r.sg.files?r.sg.files.filter(f=>!/^image\//.test(f.mime)).map(f=>({f,c:r.c})):[]);const n=rows.filter(r=>r.sg).length;
-    openSheet(`<h3>Consentements · ${esc(g.name)}</h3><p class="small muted" style="margin:0">${n} sur ${rows.length} signé${n>1?"s":""}.</p>
+    openSheet(`<h3>Consentements · ${esc(g.name)}</h3><p class="small muted" style="margin:0">${n} sur ${rows.length} signé${n>1?"s":""}.</p><div class="row-actions" style="margin:6px 0"><button class="btn small" id="cgCsv">📥 Importer Google Forms (CSV)</button></div>
       <div style="margin:8px 0">${rows.map(r=>`<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)"><b style="flex:1">${esc(r.c.name)}</b><span class="small">${r.sg?`✅ ${r.sg.type==="papier"?"papier, ":""}${CONS.fd(r.sg.signedAt)}`:r.pd?"⏳ en attente":"—"}</span>${r.sg?`<button class="btn small ghost" data-cons="view" data-id="${r.cid}" data-r="${r.sg.id}">Voir</button>`:""}</div>`).join("")}</div>
       <div class="row-actions"><button class="btn primary" id="cgP" ${n?"":"disabled"}>Imprimer / PDF (${n})</button><button class="btn" id="cgC">Fermer</button></div>
       ${pdfs.length?`<p class="small" style="margin:10px 0 4px"><b>PDF à joindre séparément</b> (ils ne peuvent pas être fusionnés dans le document) :</p>${pdfs.map(({f,c})=>`<button class="btn small ghost" data-cons="pdf" data-f="${f.id}">📄 ${esc(c.name)} · ${esc(f.name||"PDF")}</button>`).join(" ")}`:""}`,s=>{
-        s.querySelector("#cgC").onclick=closeSheet;
+        s.querySelector("#cgC").onclick=closeSheet;s.querySelector("#cgCsv").onclick=()=>consCsvSheet(gid);
         s.querySelector("#cgP").onclick=()=>printHTML(rows.filter(r=>r.sg).map(r=>`<div style="break-after:page">${CONS.docHTML(r.cid,r.sg.id)}</div>`).join(""))})},
   async send(cid){if(!SYNC.on){toast("Activez d'abord la synchronisation.");return}const c=S.children.get(cid);const g=S.groups.get(c.groupId)||{};
     const token=b64u.to(crypto.getRandomValues(new Uint8Array(16)));const raw=crypto.getRandomValues(new Uint8Array(16));const k=b64u.to(raw);
@@ -390,8 +390,9 @@ const CONS=window.CONS={DESC_DEF:"Le projet a pour but de stimuler les habileté
       try{await SYNC.be.consDelete(row.token)}catch(e){}toast("Consentement reçu pour "+(S.children.get(cid)||{}).name)}},
   docHTML(cid,rid){const c=S.children.get(cid);const r=(c.consents||[]).find(x=>x.id===rid);if(!r)return "";
     if(r.type==="papier"){const im=(r.files||[]).filter(f=>/^image\//.test(f.mime)),pf=(r.files||[]).filter(f=>!/^image\//.test(f.mime));
-      return `<div class="oxdoc cons"><h2 style="margin:0 0 2px">Consentement (formulaire papier)</h2><p class="muted small" style="margin:0">${esc(c.name)}${c.nom?" "+esc(c.nom):""} · ${esc((S.groups.get(c.groupId)||{}).name||"")}</p>
-        <p class="oxs small">Signé le ${CONS.fd(r.signedAt)} · téléversé le ${CONS.fd(r.addedAt)}${r.by?" par "+esc(r.by):""}${r.note?`<br>${esc(r.note)}`:""}</p>
+      return `<div class="oxdoc cons"><h2 style="margin:0 0 2px">Consentement (${r.src==="gforms"?"formulaire Google":"formulaire papier"})</h2><p class="muted small" style="margin:0">${esc(c.name)}${c.nom?" "+esc(c.nom):""} · ${esc((S.groups.get(c.groupId)||{}).name||"")}</p>
+        <p class="oxs small">Signé le ${CONS.fd(r.signedAt)} · téléversé le ${CONS.fd(r.addedAt)}${r.by?" par "+esc(r.by):""}${r.note?`<br>${esc(r.note)}`:""}${r.until?`<br>Valide jusqu'au ${CONS.fd(r.until+"T12:00:00")}`:""}</p>
+        ${(r.answers||[]).length?`<ul class="oxs small" style="padding-left:18px">${r.answers.map(a=>`<li>${a.v?"✓ Oui":"✗ Non"} · ${esc(a.t)}</li>`).join("")}</ul>`:""}
         ${im.map(f=>`<img src="${blobSrc(f.id)}" data-pid="${f.id}" alt="Page du consentement" style="width:100%;max-width:720px;display:block;margin:8px 0;border:1px solid #ddd">`).join("")}
         ${pf.length?`<p class="oxs small">PDF joint : ${pf.map(f=>esc(f.name||"document.pdf")).join(", ")}</p>`:""}</div>`}
     if(!r.data)return "";const D=r.data,E=D.enfant||{},T=D.textes||{};const ech=CONS.echeance(r);
